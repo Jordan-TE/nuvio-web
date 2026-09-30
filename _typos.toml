@@ -23,6 +23,7 @@ reacher = "reacher"
 Reacher = "Reacher"
 # ISO 639-2 language codes, not words.
 fre = "fre"
+wel = "wel"
 # A real variant spelling, used deliberately in the spec parser's warning.
 unparseable = "unparseable"
 # French for "Appearance": `e2e/i18n.spec.ts` asserts the French settings nav.

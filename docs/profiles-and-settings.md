@@ -51,6 +51,11 @@ platform, so it doesn't change what the mobile or TV app shows.
 - **Preferred quality** for the player's auto-pick: `auto`, `4K`, `1080p`,
   `720p` or `480p`. `auto` means the addons' own order.
 - **Subtitle size**, **colour** and **background plate**.
+- **Preferred audio language**, picked when a file carries several audio tracks:
+  a language, the browser's language, or the file's own default. Left on "Nuvio
+  app setting" it follows what the Nuvio mobile app has for the profile. That
+  value is only read: Nuvio has no shared language setting, each client keeps
+  its own, and this one never writes into the mobile app's.
 - **Preferred subtitle language**, auto-selected when a stream has a matching
   track. Empty means off.
 - **Watch region** for the "where to watch" lookup, or `auto` to derive it from

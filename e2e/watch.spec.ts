@@ -145,8 +145,8 @@ test("video player: autoplay, keyboard seek, speed menu", async ({ page }) => {
 	await page.keyboard.press("ArrowLeft");
 	await expect.poll(() => currentTime(page)).toBeLessThan(1);
 
-	await player.getByRole("button", { name: "Settings" }).click();
-	// The settings menu portals to the document body, outside the player region.
+	await player.getByRole("button", { name: "Playback speed" }).click();
+	// The speed menu portals to the document body, outside the player region.
 	await page.getByRole("menuitemradio", { name: "1.5×" }).click();
 	const rate = await page.evaluate(
 		() => document.querySelector("video")?.playbackRate ?? 0,
@@ -181,9 +181,9 @@ test("fullscreen keeps overlays mounted outside the player clickable", async ({
 		)
 		.toBe("HTML");
 
-	// The settings menu portals to <body>, i.e. outside the player region : the
+	// The speed menu portals to <body>, i.e. outside the player region : the
 	// case that used to silently do nothing in fullscreen.
-	await player.getByRole("button", { name: "Settings" }).click();
+	await player.getByRole("button", { name: "Playback speed" }).click();
 	const speed = page.getByRole("menuitemradio", { name: "1.5×" });
 	await expect(speed).toBeVisible();
 	expect(

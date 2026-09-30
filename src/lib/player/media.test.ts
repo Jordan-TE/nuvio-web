@@ -26,9 +26,9 @@ describe("nativeAudioSnapshot", () => {
 			]),
 		);
 		expect(snapshot.tracks).toEqual([
-			{ id: 0, label: "Director's commentary" },
-			{ id: 1, label: "fr" },
-			{ id: 2, label: "Track 3" },
+			{ id: 0, label: "Director's commentary", language: "en" },
+			{ id: 1, label: "fr", language: "fr" },
+			{ id: 2, label: "Track 3", language: "" },
 		]);
 	});
 
@@ -75,7 +75,10 @@ describe("attachNativeAudioTracks", () => {
 		attachNativeAudioTracks(el, onChange);
 
 		expect(onChange).toHaveBeenCalledTimes(1);
-		expect(onChange).toHaveBeenCalledWith([{ id: 0, label: "English" }], 0);
+		expect(onChange).toHaveBeenCalledWith(
+			[{ id: 0, label: "English", language: "en" }],
+			0,
+		);
 	});
 
 	it("re-syncs on addtrack/removetrack/change and cleans up all three", () => {
@@ -103,8 +106,8 @@ describe("attachNativeAudioTracks", () => {
 		listeners.addtrack();
 		expect(onChange).toHaveBeenLastCalledWith(
 			[
-				{ id: 0, label: "English" },
-				{ id: 1, label: "French" },
+				{ id: 0, label: "English", language: "en" },
+				{ id: 1, label: "French", language: "fr" },
 			],
 			0,
 		);

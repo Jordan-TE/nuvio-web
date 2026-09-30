@@ -1,25 +1,28 @@
 import type { InfoOverlayController } from "./info-overlay.svelte.ts";
 
+/** The control row's menus : one open at a time. */
+export type PlayerMenu = "speed" | "boost" | "audio";
+
 /**
- * The three mutually-exclusive side panels (info, subtitles, settings) —
- * opening one closes the others, and any one of them open keeps the
- * transport controls up (see `panelOpen`).
+ * The mutually-exclusive panels (info, subtitles, one control-row menu) :
+ * opening one closes the others, and any one of them open keeps the transport
+ * controls up (see `panelOpen`).
  */
 export function createPanelToggles(deps: {
 	infoOverlay: InfoOverlayController;
 }) {
-	let settingsOpen = $state(false);
+	let openMenu = $state<PlayerMenu | null>(null);
 	let subtitlesOpen = $state(false);
 
 	const panelOpen = $derived(
-		settingsOpen || subtitlesOpen || deps.infoOverlay.open,
+		openMenu !== null || subtitlesOpen || deps.infoOverlay.open,
 	);
 
 	function toggleInfo() {
 		if (deps.infoOverlay.open) {
 			deps.infoOverlay.close();
 		} else {
-			settingsOpen = false;
+			openMenu = null;
 			subtitlesOpen = false;
 			deps.infoOverlay.openSticky();
 		}
@@ -27,28 +30,30 @@ export function createPanelToggles(deps: {
 
 	function toggleSubtitles() {
 		subtitlesOpen = !subtitlesOpen;
-		settingsOpen = false;
+		openMenu = null;
 		deps.infoOverlay.closeSilently();
 	}
 
-	/** `DropdownMenu.Root`'s `onOpenChange` : opening it closes the other panels. */
-	function setSettingsOpen(open: boolean) {
-		settingsOpen = open;
+	/** A menu's `onOpenChange` : opening it closes the other panels. */
+	function setMenuOpen(menu: PlayerMenu, open: boolean) {
 		if (open) {
+			openMenu = menu;
 			subtitlesOpen = false;
 			deps.infoOverlay.closeSilently();
+		} else if (openMenu === menu) {
+			openMenu = null;
 		}
 	}
 
 	// Keyboard shortcut: drop both without touching the info overlay.
 	function closeMenus() {
-		settingsOpen = false;
+		openMenu = null;
 		subtitlesOpen = false;
 	}
 
 	return {
-		get settingsOpen() {
-			return settingsOpen;
+		get openMenu() {
+			return openMenu;
 		},
 		get subtitlesOpen() {
 			return subtitlesOpen;
@@ -61,7 +66,7 @@ export function createPanelToggles(deps: {
 		},
 		toggleInfo,
 		toggleSubtitles,
-		setSettingsOpen,
+		setMenuOpen,
 		closeMenus,
 	};
 }

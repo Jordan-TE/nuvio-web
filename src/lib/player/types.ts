@@ -44,6 +44,14 @@ export interface VideoPlayerProps {
 	subtitleColor?: string;
 	subtitleBackground?: boolean;
 	preferredLanguage?: string;
+	/** Audio languages wanted, best first : picks the track on a multi-audio source. */
+	audioLanguages?: string[];
+	/** Restored from a reload : wins over `audioLanguages`. */
+	initialAudioTrack?: number | null;
+	/** Volume boost level restored from a reload; 1 is off. */
+	initialBoost?: number;
+	/** The viewer changed the boost or the audio track. */
+	onPlaybackSettings?: (patch: { boost?: number; audioTrack?: number }) => void;
 	/** The stream label hints at an audio codec the browser can't decode. */
 	audioRisky?: boolean;
 	/** The stream label hints at a video codec the browser can't decode. */

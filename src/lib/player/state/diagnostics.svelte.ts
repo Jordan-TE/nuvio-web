@@ -1,3 +1,4 @@
+import type { AudioPreference } from "#lib/player/transmux-session.js";
 import { createPlayerMedia } from "./media.svelte.ts";
 import { createProgressReporter } from "./progress.svelte.ts";
 import { createSilentAudioWatch } from "./silent-audio.svelte.ts";
@@ -19,6 +20,9 @@ export function createPlaybackDiagnostics(deps: {
 	fatalError: () => string | null;
 	onLoad: () => void;
 	onFatal: (message: string) => void;
+	audioPreference: () => AudioPreference;
+	/** Swaps the source to the in-browser fix : see `media.fix`. */
+	tryFix: (reason: "probe" | "silent") => Promise<boolean>;
 	onProgress: (position: number, duration: number) => void;
 }) {
 	const media = createPlayerMedia({
@@ -26,6 +30,7 @@ export function createPlaybackDiagnostics(deps: {
 		video: deps.video,
 		onLoad: deps.onLoad,
 		onFatal: deps.onFatal,
+		audioPreference: deps.audioPreference,
 	});
 
 	const progress = createProgressReporter({
@@ -44,6 +49,7 @@ export function createPlaybackDiagnostics(deps: {
 		onTrackSwitch: (index) => {
 			media.activeAudioTrack = index;
 		},
+		tryFix: deps.tryFix,
 	});
 
 	// Audio plays but the picture never appears : a video codec that dodged the

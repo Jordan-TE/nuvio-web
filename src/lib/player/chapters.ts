@@ -2,11 +2,12 @@
  * Chapter markers for the scrub bar.
  *
  * Embedded chapters are read **in the browser**, from the container's own
- * metadata, with a handful of small `Range` requests : Matroska `Chapters` and
- * MP4 Nero `chpl`. The server never touches a stream's bytes (the app hosts no
- * media), and the reads stop before any media data: a Matroska walk ends at the
- * first `Cluster`, an MP4 walk skips `mdat` by its size. A host that answers
- * without CORS or ignores `Range` just yields no chapters.
+ * metadata, with a handful of small `Range` requests : Matroska `Chapters`,
+ * MP4 Nero `chpl`, else a QuickTime chapter track. The server never touches a
+ * stream's bytes (the app hosts no media), and the reads stay off the media
+ * data: a Matroska walk ends at the first `Cluster`, an MP4 walk skips `mdat`
+ * by its size and only goes back in for the chapter track's title samples. A
+ * host that answers without CORS or ignores `Range` just yields no chapters.
  *
  * When the file has none, TheIntroDB / AniSkip segments stand in.
  */
@@ -26,8 +27,11 @@ export type ReadRange = (
 const HEAD_BYTES = 64 * 1024;
 /** A chapter list is kilobytes; anything past this is not one worth reading. */
 const MAX_ELEMENT_BYTES = 1024 * 1024;
-// ponytail: one read per MP4 box header, so a moov with many traks walks them one by one; read the whole moov in one go if this cap bites.
-const MAX_READS = 24;
+// ponytail: an MP4 walk costs one or two reads per trak, then one per scattered chapter title, in sequence; read them concurrently if this cap bites.
+const MAX_READS = 64;
+/** Box headers are read this much at a time, so small neighbours come along. */
+const BOX_WINDOW_BYTES = 512;
+const MAX_CHAPTERS = 1024;
 
 const utf8 = new TextDecoder();
 
@@ -323,37 +327,270 @@ export function parseChpl(bytes: Uint8Array): Chapter[] {
 	return tidy(chapters);
 }
 
-async function readMp4(read: ReadRange): Promise<Chapter[]> {
-	/** The first `type` box among the siblings in `[start, end)`. */
-	async function find(
-		type: string,
-		start: number,
-		end: number,
-	): Promise<Box | null> {
+function dataView(bytes: Uint8Array): DataView {
+	return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+}
+
+/** The payloads of a chapter track's `mdhd` and sample table boxes. */
+interface SampleTables {
+	mdhd: Uint8Array;
+	stts: Uint8Array;
+	stsc: Uint8Array;
+	stsz: Uint8Array;
+	/** `stco` (32-bit chunk offsets), or `co64` when `wide`. */
+	chunkOffsets: Uint8Array;
+	wide: boolean;
+}
+
+/** One sample of a chapter track : `start` in seconds, `offset` from the start of the file. */
+interface ChapterSample {
+	start: number;
+	offset: number;
+	size: number;
+}
+
+/** The start, in seconds, of each of the first `count` samples of an `stts`. */
+function sampleStarts(
+	stts: DataView,
+	timescale: number,
+	count: number,
+): number[] {
+	const starts: number[] = [];
+	const entries = stts.getUint32(4);
+	let time = 0;
+	for (let entry = 0; entry < entries && starts.length < count; entry += 1) {
+		const sampleCount = stts.getUint32(8 + entry * 8);
+		const delta = stts.getUint32(12 + entry * 8);
+		for (let i = 0; i < sampleCount && starts.length < count; i += 1) {
+			starts.push(time / timescale);
+			time += delta;
+		}
+	}
+	return starts;
+}
+
+/** Where and when each sample of a chapter track is. Throws on a truncated table. */
+function chapterSamples(tables: SampleTables): ChapterSample[] {
+	const mdhd = dataView(tables.mdhd);
+	const stsc = dataView(tables.stsc);
+	const stsz = dataView(tables.stsz);
+	const chunkOffsets = dataView(tables.chunkOffsets);
+	const uniformSize = stsz.getUint32(4);
+	const starts = sampleStarts(
+		dataView(tables.stts),
+		mdhd.getUint32(mdhd.getUint8(0) === 1 ? 20 : 12),
+		Math.min(stsz.getUint32(8), MAX_CHAPTERS),
+	);
+
+	const samples: ChapterSample[] = [];
+	const chunkCount = chunkOffsets.getUint32(4);
+	const runCount = stsc.getUint32(4);
+	let run = 0;
+	for (let chunk = 1; chunk <= chunkCount; chunk += 1) {
+		// An `stsc` entry applies from its first chunk (1-based) up to the next entry's.
+		while (run + 1 < runCount && stsc.getUint32(8 + (run + 1) * 12) <= chunk) {
+			run += 1;
+		}
+		const samplesPerChunk = stsc.getUint32(12 + run * 12);
+		let offset = tables.wide
+			? Number(chunkOffsets.getBigUint64(8 + (chunk - 1) * 8))
+			: chunkOffsets.getUint32(8 + (chunk - 1) * 4);
+		for (let i = 0; i < samplesPerChunk; i += 1) {
+			if (samples.length === starts.length) {
+				return samples;
+			}
+			const size = uniformSize || stsz.getUint32(12 + samples.length * 4);
+			samples.push({ start: starts[samples.length], offset, size });
+			offset += size;
+		}
+	}
+	return samples;
+}
+
+/** A chapter track sample → its title : a 16-bit length, then UTF-8, or UTF-16 after a BOM. */
+function chapterTitle(sample: Uint8Array): string | null {
+	if (sample.length < 2) {
+		return null;
+	}
+	const text = sample.subarray(2, 2 + dataView(sample).getUint16(0));
+	let decoder = utf8;
+	if (text[0] === 0xfe && text[1] === 0xff) {
+		decoder = new TextDecoder("utf-16be");
+	} else if (text[0] === 0xff && text[1] === 0xfe) {
+		decoder = new TextDecoder("utf-16le");
+	}
+	return decoder.decode(text).trim() || null;
+}
+
+type BoxReader = ReturnType<typeof boxReader>;
+
+/** Box walking over `read`, a window at a time so small neighbours cost one read. */
+function boxReader(read: ReadRange) {
+	let window = { offset: 0, end: 0, bytes: new Uint8Array(0) as Uint8Array };
+
+	/** `length` bytes at `offset`, out of the last read when it covers them. */
+	async function peek(
+		offset: number,
+		length: number,
+	): Promise<Uint8Array | null> {
+		if (offset < window.offset || offset + length > window.end) {
+			const size = Math.max(length, BOX_WINDOW_BYTES);
+			const bytes = await read(offset, size);
+			if (!bytes) {
+				return null;
+			}
+			window = { offset, end: offset + size, bytes };
+		}
+		const start = offset - window.offset;
+		return window.bytes.subarray(start, start + length);
+	}
+
+	/** The sibling boxes in `[start, end)`. */
+	async function* siblings(start: number, end: number) {
 		let pos = start;
 		while (pos < end) {
 			// biome-ignore lint/performance/noAwaitInLoops: each box's offset comes from the previous box's size
-			const header = await read(pos, 16);
+			const header = await peek(pos, 16);
 			const box = header && boxAt(header, pos);
 			if (!box) {
-				return null;
+				return;
 			}
+			yield box;
+			pos = box.end;
+		}
+	}
+
+	/** The first `type` box among `parent`'s children. */
+	async function find(type: string, parent: Box | null): Promise<Box | null> {
+		if (!parent) {
+			return null;
+		}
+		for await (const box of siblings(parent.data, parent.end)) {
 			if (box.type === type) {
 				return box;
 			}
-			pos = box.end;
 		}
 		return null;
 	}
 
-	const moov = await find("moov", 0, Number.POSITIVE_INFINITY);
-	const udta = moov && (await find("udta", moov.data, moov.end));
-	const chpl = udta && (await find("chpl", udta.data, udta.end));
-	if (!chpl || chpl.end - chpl.data > MAX_ELEMENT_BYTES) {
+	/** The payload of `parent`'s first `type` child, when it is small enough. */
+	async function child(
+		type: string,
+		parent: Box | null,
+	): Promise<Uint8Array | null> {
+		const box = await find(type, parent);
+		if (!box || box.end - box.data > MAX_ELEMENT_BYTES) {
+			return null;
+		}
+		return peek(box.data, box.end - box.data);
+	}
+
+	return { peek, siblings, find, child };
+}
+
+/** The sample tables of `track` when it is a text track, else null. */
+async function sampleTables(
+	boxes: BoxReader,
+	track: Box,
+): Promise<SampleTables | null> {
+	// A text track is a few kilobytes: one read holds every box below.
+	const size = track.end - track.data;
+	if (size > MAX_ELEMENT_BYTES || !(await boxes.peek(track.data, size))) {
+		return null;
+	}
+	const mdia = await boxes.find("mdia", track);
+	const hdlr = await boxes.child("hdlr", mdia);
+	const handler = hdlr ? String.fromCharCode(...hdlr.subarray(8, 12)) : "";
+	if (handler !== "text" && handler !== "sbtl") {
+		return null;
+	}
+	const stbl = await boxes.find("stbl", await boxes.find("minf", mdia));
+	const mdhd = await boxes.child("mdhd", mdia);
+	const stts = await boxes.child("stts", stbl);
+	const stsc = await boxes.child("stsc", stbl);
+	const stsz = await boxes.child("stsz", stbl);
+	const stco = await boxes.child("stco", stbl);
+	const chunkOffsets = stco ?? (await boxes.child("co64", stbl));
+	if (!(mdhd && stts && stsc && stsz && chunkOffsets)) {
+		return null;
+	}
+	return { mdhd, stts, stsc, stsz, chunkOffsets, wide: !stco };
+}
+
+/** The chapters of a chapter track : a start per sample, a title per readable one. */
+async function trackChapters(
+	boxes: BoxReader,
+	tables: SampleTables,
+): Promise<Chapter[]> {
+	const chapters: Chapter[] = [];
+	for (const sample of chapterSamples(tables)) {
+		// biome-ignore lint/performance/noAwaitInLoops: neighbouring titles share one read
+		const bytes = await boxes.peek(
+			sample.offset,
+			Math.min(sample.size, HEAD_BYTES),
+		);
+		// An unreadable title still leaves the marker.
+		chapters.push({ start: sample.start, title: bytes && chapterTitle(bytes) });
+	}
+	return tidy(chapters);
+}
+
+/** A `trak`'s own id, and the track ids its `tref/chap` names. */
+async function trackIds(
+	boxes: BoxReader,
+	track: Box,
+): Promise<{ id: number | null; referenced: number[] }> {
+	const tkhd = await boxes.child("tkhd", track);
+	const id = tkhd && dataView(tkhd).getUint32(tkhd[0] === 1 ? 20 : 12);
+	const chap = await boxes.child("chap", await boxes.find("tref", track));
+	const referenced: number[] = [];
+	// A real `chap` names one or two tracks : the cap is for a malformed one.
+	for (let pos = 0; chap && pos + 4 <= Math.min(chap.length, 64); pos += 4) {
+		referenced.push(dataView(chap).getUint32(pos));
+	}
+	return { id, referenced };
+}
+
+async function readMp4(read: ReadRange): Promise<Chapter[]> {
+	const boxes = boxReader(read);
+	const moov = await boxes.find("moov", {
+		type: "file",
+		data: 0,
+		end: Number.POSITIVE_INFINITY,
+	});
+	if (!moov) {
 		return [];
 	}
-	const payload = await read(chpl.data, chpl.end - chpl.data);
-	return payload ? parseChpl(payload) : [];
+	// One pass over moov : its udta, each track by id, and the `chap` references.
+	let udta: Box | null = null;
+	const tracks = new Map<number | null, Box>();
+	const referenced: number[] = [];
+	for await (const box of boxes.siblings(moov.data, moov.end)) {
+		if (box.type === "udta") {
+			udta ??= box;
+		}
+		if (box.type === "trak") {
+			const ids = await trackIds(boxes, box);
+			tracks.set(ids.id, box);
+			referenced.push(...ids.referenced);
+		}
+	}
+
+	const chpl = await boxes.child("chpl", udta);
+	const nero = chpl ? parseChpl(chpl) : [];
+	if (nero.length > 0) {
+		return nero;
+	}
+	// A `chap` reference may also name a track of chapter thumbnails : skipped.
+	for (const id of new Set(referenced)) {
+		const track = tracks.get(id);
+		// biome-ignore lint/performance/noAwaitInLoops: the first text track wins, the rest are never read
+		const tables = track && (await sampleTables(boxes, track));
+		if (tables) {
+			return trackChapters(boxes, tables);
+		}
+	}
+	return [];
 }
 
 // -- Shared --------------------------------------------------------------------

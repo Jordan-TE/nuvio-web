@@ -35,7 +35,7 @@
 		"@internationalized/date": "3.12.4",
 		"@j178/prek": "0.5.4",
 		"@lucide/svelte": "1.49.0",
-		"@orochibraru/svelte-smol": "1.8.3",
+		"@orochibraru/svelte-smol": "1.8.4",
 		"@playwright/test": "1.63.0",
 		"@sveltejs/kit": "3.0.0-next.31",
 		"@sveltejs/vite-plugin-svelte": "7.3.1",
@@ -67,7 +67,10 @@
 		"vitest": "4.1.11"
 	},
 	"dependencies": {
+		"@mediabunny/ac3": "1.61.0",
+		"@mediabunny/dts": "1.61.0",
 		"hls.js": "1.7.3",
+		"mediabunny": "1.61.0",
 		"valibot": "1.5.0"
 	},
 	"imports": {

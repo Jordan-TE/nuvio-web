@@ -46,6 +46,19 @@
 	// `breakvideo` also flags the codec as risky so the watchdog's short fuse
 	// fires within the sample clip's runtime.
 	const videoRisky = $derived(Boolean(page.url.searchParams.get("breakvideo")));
+	// `?audiolang=fr`, `?audio=1`, `?boost=2` : the audio language wanted, and the
+	// audio track and boost a reload restores.
+	const audioLanguages = $derived(
+		page.url.searchParams.get("audiolang")?.split(",") ?? [],
+	);
+	const initialAudioTrack = $derived(
+		page.url.searchParams.has("audio")
+			? Number(page.url.searchParams.get("audio"))
+			: null,
+	);
+	const initialBoost = $derived(
+		Number(page.url.searchParams.get("boost") ?? "1"),
+	);
 	// `?subs=<url>` adds one subtitle track (fetched + converted client-side).
 	const subtitles = $derived(
 		page.url.searchParams.get("subs")
@@ -120,6 +133,9 @@
     startTime={start}
     {externalUrl}
     {videoRisky}
+    {audioLanguages}
+    {initialAudioTrack}
+    {initialBoost}
     {subtitles}
     {introStart}
     {introEnd}

@@ -17,6 +17,7 @@
 	import { createRemotePlayback } from "#lib/player/state/remote-playback.svelte.js";
 	import { createSubtitleController } from "#lib/player/state/subtitle-controller.svelte.js";
 	import { createVolumeBoost } from "#lib/player/state/volume-boost.svelte.js";
+	import type { TransmuxReason } from "#lib/player/transmux-session.js";
 	import type { VideoPlayerProps } from "#lib/player/types.js";
 	import { theme } from "#lib/settings/theme.svelte.js";
 	import { subtitleFontSize } from "#lib/settings/ui-settings.js";
@@ -43,6 +44,10 @@
 		subtitleColor = "#ffffff",
 		subtitleBackground = true,
 		preferredLanguage = "",
+		audioLanguages = [],
+		initialAudioTrack = null,
+		initialBoost = 1,
+		onPlaybackSettings,
 		audioRisky = false,
 		videoRisky = false,
 		externalUrl = null,
@@ -77,6 +82,7 @@
 		src: () => src,
 		startTime: () => startTime,
 		panelOpen: () => panels.panelOpen,
+		tryRemux: () => fixSource("container"),
 		onFatal: (message) => {
 			fatalError = message;
 		},
@@ -144,8 +150,25 @@
 			onFatal: (message) => {
 				fatalError = message;
 			},
+			audioPreference: () => ({
+				languages: audioLanguages,
+				track: initialAudioTrack,
+			}),
+			tryFix: (reason) => fixSource(reason),
 			onProgress: (position, total) => onProgress?.(position, total),
 		});
+
+	// The in-browser fix for a file this browser can't play as is. The swap
+	// shows the stream loader, which says so when the audio is being converted.
+	let convertingAudio = $state(false);
+	async function fixSource(reason: TransmuxReason) {
+		const fixed = await media.fix(reason);
+		if (fixed) {
+			transport.loading = true;
+			convertingAudio = media.convertingAudio;
+		}
+		return fixed;
+	}
 
 	// Subtitle files are fetched + converted to WebVTT in the browser, on
 	// demand : never proxied through the server.
@@ -193,10 +216,38 @@
 	const boost = createVolumeBoost({ video: () => video, src: () => src });
 	$effect(() => () => boost.dispose());
 	async function selectBoost(level: number) {
-		if (!(await boost.set(level))) {
+		if (await boost.set(level)) {
+			onPlaybackSettings?.({ boost: level });
+		} else {
 			toast.error(m.player_boost_unavailable());
 		}
 	}
+	// A restored boost waits for playback : by then the browser lets audio run.
+	let boostRestored = false;
+	function onPlaying() {
+		onReady();
+		convertingAudio = false;
+		if (!boostRestored) {
+			boostRestored = true;
+			if (initialBoost > 1) {
+				void boost.set(initialBoost);
+			}
+		}
+	}
+
+	// The control row's view of the audio tracks : a pick is reported upward.
+	const audioControls = {
+		get audioTracks() {
+			return media.audioTracks;
+		},
+		get activeAudioTrack() {
+			return media.activeAudioTrack;
+		},
+		selectAudioTrack(id: number) {
+			media.selectAudioTrack(id);
+			onPlaybackSettings?.({ audioTrack: id });
+		},
+	};
 
 	const bufferedEnd = $derived(transport.buffered.at(-1)?.end ?? 0);
 	const progressRatio = $derived(
@@ -285,7 +336,7 @@
     onloadedmetadata={player.onLoadedMetadata}
     onloadeddata={onReady}
     oncanplay={onReady}
-    onplaying={onReady}
+    onplaying={onPlaying}
     onwaiting={player.onWaiting}
     onerror={player.onMediaError}
     onpause={progress.flush}
@@ -316,6 +367,9 @@
     {detailHref}
     {minimized}
     loading={transport.loading}
+    loadingLabel={convertingAudio
+      ? m.player_audio_converted()
+      : m.player_loading_stream()}
     {fatalError}
     silentAudioIssue={silentAudio.issue}
     videoDecodeIssue={videoDecode.issue}
@@ -338,12 +392,12 @@
   <TransportControls
     {transport}
     {player}
-    {media}
+    media={audioControls}
     {minimized}
     fatalError={Boolean(fatalError)}
     infoOpen={infoOverlay.open}
     subtitlesOpen={panels.subtitlesOpen}
-    settingsOpen={panels.settingsOpen}
+    openMenu={panels.openMenu}
     {title}
     {subheading}
     hasInfo={Boolean(info)}
@@ -364,7 +418,7 @@
     boost={boost.level}
     boostPending={boost.pending}
     onBoostSelect={selectBoost}
-    onSettingsOpenChange={panels.setSettingsOpen}
+    onMenuOpenChange={panels.setMenuOpen}
   />
 
   <SubtitlePanel

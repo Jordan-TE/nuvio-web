@@ -53,11 +53,11 @@
         onerror={() => (logoBroken = true)}
         class="animate-soft-pulse max-h-24 max-w-xs object-contain drop-shadow-lg lg:max-h-28"
       />
+    {:else}
+      <!-- No title art, or it failed to load : the brand mark carries the
+			     loading screen on its own. -->
+      <LoadingMark />
     {/if}
-    <!-- Its own animation, not tied to whatever title/logo art did or didn't
-		     load : sits under the logo when there is one, or carries the loading
-		     screen on its own when there isn't. -->
-    <LoadingMark />
     {#if label}
       <p
         class="flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-medium text-white/80 shadow-[inset_0_1px_0_rgb(255_255_255/0.15)] ring-1 ring-white/15 backdrop-blur-xl backdrop-saturate-150"

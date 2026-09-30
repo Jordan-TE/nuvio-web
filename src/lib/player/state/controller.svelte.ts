@@ -15,6 +15,7 @@ export function createPlayerController(deps: {
 	src: () => string;
 	startTime: () => number;
 	panelOpen: () => boolean;
+	tryRemux: () => Promise<boolean>;
 	onFatal: (message: string) => void;
 	onEnded?: () => void;
 }) {
@@ -30,6 +31,7 @@ export function createPlayerController(deps: {
 		video: deps.video,
 		src: deps.src,
 		startTime: deps.startTime,
+		tryRemux: deps.tryRemux,
 		onFatal: deps.onFatal,
 		onEnded: deps.onEnded,
 	});

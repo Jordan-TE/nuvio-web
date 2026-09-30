@@ -150,7 +150,7 @@ test("volume boost routes through Web Audio and shows its level", async ({
 
 	const player = page.getByRole("region", { name: "Video player" });
 	await player.hover();
-	await player.getByRole("button", { name: "Settings" }).click();
+	await player.getByRole("button", { name: "Volume boost" }).click();
 	await page.getByRole("menuitemradio", { name: "200%" }).click();
 
 	await expect(player.getByText("200%", { exact: true })).toBeVisible();

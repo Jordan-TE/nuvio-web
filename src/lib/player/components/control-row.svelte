@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AudioLinesIcon from "@lucide/svelte/icons/audio-lines";
 	import CaptionsIcon from "@lucide/svelte/icons/captions";
 	import CaptionsOffIcon from "@lucide/svelte/icons/captions-off";
 	import CastIcon from "@lucide/svelte/icons/cast";
@@ -11,17 +12,21 @@
 	import PlayIcon from "@lucide/svelte/icons/play";
 	import RotateCwIcon from "@lucide/svelte/icons/rotate-cw";
 	import SkipForwardIcon from "@lucide/svelte/icons/skip-forward";
+	import SpeakerIcon from "@lucide/svelte/icons/speaker";
 	import TvMinimalPlayIcon from "@lucide/svelte/icons/tv-minimal-play";
 	import Volume1Icon from "@lucide/svelte/icons/volume-1";
 	import Volume2Icon from "@lucide/svelte/icons/volume-2";
 	import VolumeXIcon from "@lucide/svelte/icons/volume-x";
 	import { Button } from "#lib/components/ui/button/index.js";
-	import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
 	import { m } from "#lib/i18n/index.js";
+	import { BOOST_LEVELS } from "#lib/player/boost.js";
+	import type { PlayerMenu } from "#lib/player/state/panel-toggles.svelte.js";
 	import type { createPlayerTransportActions } from "#lib/player/state/transport-actions.svelte.js";
 	import type { PlayerTransportState } from "#lib/player/state/transport-state.svelte.js";
 	import { cn } from "#lib/utils.js";
-	import SettingsMenu from "./settings-menu.svelte";
+	import OptionMenu from "./option-menu.svelte";
+
+	const RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 	let {
 		transport,
@@ -36,8 +41,8 @@
 		onCast,
 		subtitlesOpen,
 		onToggleSubtitles,
-		settingsOpen,
-		onSettingsOpenChange,
+		openMenu,
+		onMenuOpenChange,
 		boost,
 		boostPending,
 		onBoostSelect,
@@ -62,8 +67,8 @@
 		onCast: () => void;
 		subtitlesOpen: boolean;
 		onToggleSubtitles: () => void;
-		settingsOpen: boolean;
-		onSettingsOpenChange: (open: boolean) => void;
+		openMenu: PlayerMenu | null;
+		onMenuOpenChange: (menu: PlayerMenu, open: boolean) => void;
 		boost: number;
 		boostPending: boolean;
 		onBoostSelect: (level: number) => void;
@@ -123,6 +128,22 @@
       title={m.player_volume_hint()}
       class="hidden h-1 w-20 cursor-pointer appearance-none rounded-full bg-white/20 accent-white sm:block [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
     />
+    <OptionMenu
+      open={openMenu === "boost"}
+      onOpenChange={(open) => onMenuOpenChange("boost", open)}
+      label={m.player_volume_boost()}
+      options={BOOST_LEVELS.map((level) => ({
+        value: String(level),
+        label: level === 1 ? m.player_boost_off() : `${level * 100}%`,
+      }))}
+      value={String(boost)}
+      onSelect={(value) => onBoostSelect(Number(value))}
+      active={boost > 1}
+      disabled={boostPending}
+      align="start"
+    >
+      <SpeakerIcon />
+    </OptionMenu>
     {#if boost > 1}
       <span
         class="rounded-full bg-primary/25 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white ring-1 ring-primary/50"
@@ -182,38 +203,42 @@
       </Button>
     {/if}
 
-    <DropdownMenu.Root open={settingsOpen} onOpenChange={onSettingsOpenChange}>
-      <DropdownMenu.Trigger>
-        {#snippet child({ props })}
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={m.nav_settings()}
-            title={m.player_settings_hint()}
-            class="rounded-full hover:bg-white/15 hover:text-white dark:hover:bg-white/15 [&_svg]:size-5"
-            {...props}
-          >
-            <GaugeIcon />
-          </Button>
-        {/snippet}
-      </DropdownMenu.Trigger>
-      <SettingsMenu
-        rate={transport.rate}
-        audioTracks={media.audioTracks}
-        activeAudioTrack={media.activeAudioTrack}
-        onRateSelect={(value) => (transport.rate = value)}
-        onAudioTrackSelect={(id) => media.selectAudioTrack(id)}
-        {boost}
-        {boostPending}
-        {onBoostSelect}
-      />
-    </DropdownMenu.Root>
+    {#if media.audioTracks.length > 1}
+      <OptionMenu
+        open={openMenu === "audio"}
+        onOpenChange={(open) => onMenuOpenChange("audio", open)}
+        label={m.player_audio()}
+        options={media.audioTracks.map((track) => ({
+          value: String(track.id),
+          label: track.label,
+        }))}
+        value={String(media.activeAudioTrack)}
+        onSelect={(value) => media.selectAudioTrack(Number(value))}
+      >
+        <AudioLinesIcon />
+      </OptionMenu>
+    {/if}
+
+    <OptionMenu
+      open={openMenu === "speed"}
+      onOpenChange={(open) => onMenuOpenChange("speed", open)}
+      label={m.player_playback_speed()}
+      options={RATES.map((rate) => ({
+        value: String(rate),
+        label: rate === 1 ? m.player_speed_normal() : `${rate}×`,
+      }))}
+      value={String(transport.rate)}
+      onSelect={(value) => (transport.rate = Number(value))}
+      active={transport.rate !== 1}
+    >
+      <GaugeIcon />
+    </OptionMenu>
 
     {#if castAvailable}
       <Button
         variant="ghost"
         size="icon"
-        aria-label={casting ? m.player_stop_casting() : m.common_cast()}
+        aria-label={casting ? m.player_stop_casting() : m.player_cast_hint()}
         title={casting ? m.player_stop_casting() : m.player_cast_hint()}
         aria-pressed={casting}
         onclick={onCast}

@@ -39,3 +39,4 @@ screens/
 # run); only our own config is committed.
 /.vale/styles/*
 !/.vale/styles/config/
+.playwright-mcp/

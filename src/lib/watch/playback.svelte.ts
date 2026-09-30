@@ -57,6 +57,11 @@ class PlaybackHandoff {
 		}
 	}
 
+	/** The pick made in this page's lifetime, not one read back from storage. */
+	fresh(videoId: string): SelectedStream | null {
+		return this.#current?.videoId === videoId ? this.#current : null;
+	}
+
 	take(videoId: string): SelectedStream | null {
 		if (this.#current?.videoId === videoId) {
 			return this.#current;
@@ -106,24 +111,27 @@ interface CachedLink extends SelectedStream {
 	resolvedAt: number;
 }
 
-function readCache(): Record<string, CachedLink> {
+function readCache(storageKey = LINK_CACHE_KEY): Record<string, CachedLink> {
 	if (!browser) {
 		return {};
 	}
 	try {
-		return JSON.parse(localStorage.getItem(LINK_CACHE_KEY) ?? "{}");
+		return JSON.parse(localStorage.getItem(storageKey) ?? "{}");
 	} catch {
 		return {};
 	}
 }
 
-function writeCache(map: Record<string, CachedLink>): void {
+function writeCache(
+	map: Record<string, CachedLink>,
+	storageKey = LINK_CACHE_KEY,
+): void {
 	try {
 		const entries = Object.entries(map).sort(
 			(a, b) => b[1].resolvedAt - a[1].resolvedAt,
 		);
 		localStorage.setItem(
-			LINK_CACHE_KEY,
+			storageKey,
 			JSON.stringify(Object.fromEntries(entries.slice(0, MAX_ENTRIES))),
 		);
 	} catch {
@@ -167,4 +175,53 @@ export function forgetLink(videoId: string): void {
 		delete map[videoId];
 		writeCache(map);
 	}
+}
+
+// ---------------------------------------------------------------------------
+// The stream a player URL points at : `?stream=<key>` names it, this browser
+// holds the link. The key is a hash, so a debrid URL never reaches the address
+// bar, the history, or whoever the page link is pasted to.
+
+const PICKS_KEY = "nuvio:picked-streams";
+
+/** A short, stable name for a stream : FNV-1a of its URL, else its info hash. */
+export function streamKey(stream: {
+	url: string | null;
+	infoHash: string | null;
+}): string {
+	const text = stream.url ?? stream.infoHash ?? "";
+	let hash = 0x81_1c_9d_c5;
+	for (let index = 0; index < text.length; index++) {
+		hash = Math.imul(hash ^ text.charCodeAt(index), 0x01_00_01_93);
+	}
+	return (hash >>> 0).toString(36);
+}
+
+/** Store the stream a player URL is about to name. Returns its key. */
+export function rememberPick(stream: SelectedStream): string {
+	const key = streamKey(stream);
+	if (browser) {
+		const map = readCache(PICKS_KEY);
+		map[key] = { ...stream, resolvedAt: Date.now() };
+		writeCache(map, PICKS_KEY);
+	}
+	return key;
+}
+
+/** The stream `key` names for `videoId`, if this browser has it and it's fresh. */
+export function recallPick(
+	videoId: string,
+	key: string | null,
+	maxAgeDays: number,
+): SelectedStream | null {
+	const entry = key ? readCache(PICKS_KEY)[key] : undefined;
+	if (
+		!entry ||
+		entry.videoId !== videoId ||
+		Date.now() - entry.resolvedAt > maxAgeDays * 86_400_000
+	) {
+		return null;
+	}
+	const { resolvedAt: _resolvedAt, ...stream } = entry;
+	return stream;
 }

@@ -93,6 +93,46 @@ function chpl(version: number, chapters: Array<[number, string]>): Uint8Array {
 	);
 }
 
+/** A chapter track sample : a 16-bit length, then the title. */
+function titleSample(title: Uint8Array): Uint8Array {
+	return concat(be(title.length, 2), title);
+}
+
+function utf16(value: string): Uint8Array {
+	return concat(
+		new Uint8Array([0xfe, 0xff]),
+		...[...value].map((character) => be(character.charCodeAt(0), 2)),
+	);
+}
+
+/** A `trak` : `references` become its `tref/chap`, `tables` its `stbl` children. */
+function trak(
+	id: number,
+	handler: string,
+	references: number[],
+	...tables: Uint8Array[]
+): Uint8Array {
+	return box(
+		"trak",
+		box("tkhd", be(0, 12), be(id, 4), new Uint8Array(68)),
+		...(references.length > 0
+			? [box("tref", box("chap", ...references.map((track) => be(track, 4))))]
+			: []),
+		box(
+			"mdia",
+			// Timescale 1000 : sample durations are milliseconds.
+			box("mdhd", be(0, 12), be(1000, 4), be(0, 8)),
+			box("hdlr", be(0, 8), text(handler), new Uint8Array(13)),
+			box("minf", box("stbl", ...tables)),
+		),
+	);
+}
+
+/** A full box of 32-bit fields, after its version and flags. */
+function table(type: string, ...fields: number[]): Uint8Array {
+	return box(type, be(0, 4), ...fields.map((field) => be(field, 4)));
+}
+
 // -- Matroska --------------------------------------------------------------------
 
 describe("readChapters : Matroska", () => {
@@ -186,6 +226,139 @@ describe("readChapters : MP4", () => {
 			{ start: 0, title: "A" },
 			{ start: 10, title: "B" },
 		]);
+	});
+
+	// Two titles in a first chunk, a third in a second chunk 300 KiB further.
+	const titles = [
+		titleSample(text("Cold open")),
+		titleSample(utf16("Générique")),
+		titleSample(text("Ending")),
+	];
+	const ftyp = box("ftyp", text("isom"));
+	const firstChunk = ftyp.length + 8;
+	const secondChunk = firstChunk + 300_000;
+	const media = new Uint8Array(400_000);
+	media.set(concat(titles[0], titles[1]), 0);
+	media.set(titles[2], 300_000);
+	const samples = [
+		table("stts", 2, 1, 62_500, 2, 600_000),
+		table("stsc", 2, 1, 2, 1, 2, 1, 1),
+		table("stsz", 0, 3, ...titles.map((title) => title.length)),
+	];
+	const video = (references: number[]) =>
+		trak(1, "vide", references, box("stsz", new Uint8Array(5000)));
+	const chapterTrack = trak(
+		3,
+		"text",
+		[],
+		...samples,
+		table("stco", 2, firstChunk, secondChunk),
+	);
+	const expected = [
+		{ start: 0, title: "Cold open" },
+		{ start: 62.5, title: "Générique" },
+		{ start: 662.5, title: "Ending" },
+	];
+
+	it("reads a QuickTime chapter track when there is no chpl", async () => {
+		const file = concat(
+			ftyp,
+			box("mdat", media),
+			box("moov", box("mvhd", new Uint8Array(100)), video([3]), chapterTrack),
+		);
+		const { read, reads } = fileReader(file);
+
+		expect(await readChapters(read)).toEqual(expected);
+		// moov, the text trak, the far title : the near ones came with the head.
+		expect(reads.slice(1).every(([, length]) => length < 1024)).toBe(true);
+		expect(reads.length).toBeLessThan(8);
+	});
+
+	it("reads 64-bit chunk offsets, and skips a referenced track that is not text", async () => {
+		const wide = trak(
+			3,
+			"text",
+			[],
+			...samples,
+			box("co64", be(0, 4), be(2, 4), be(firstChunk, 8), be(secondChunk, 8)),
+		);
+		const thumbnails = trak(2, "vide", [], ...samples);
+		const file = concat(
+			ftyp,
+			box("mdat", media),
+			box("moov", video([2, 3]), thumbnails, wide),
+		);
+		expect(await readChapters(fileReader(file).read)).toEqual(expected);
+	});
+
+	it("prefers chpl over the chapter track", async () => {
+		const file = concat(
+			ftyp,
+			box("mdat", media),
+			box(
+				"moov",
+				video([3]),
+				chapterTrack,
+				box(
+					"udta",
+					chpl(1, [
+						[0, "Nero A"],
+						[30, "Nero B"],
+					]),
+				),
+			),
+		);
+		expect(
+			(await readChapters(fileReader(file).read)).map(({ title }) => title),
+		).toEqual(["Nero A", "Nero B"]);
+	});
+
+	it("keeps the markers when a title cannot be read, and none on a truncated table", async () => {
+		const moovOf = (track: Uint8Array) =>
+			concat(ftyp, box("mdat", media), box("moov", video([3]), track));
+		const { read } = fileReader(moovOf(chapterTrack));
+		const chapters = await readChapters(async (offset, length) =>
+			offset === secondChunk ? null : read(offset, length),
+		);
+		expect(chapters).toEqual([
+			...expected.slice(0, 2),
+			{ start: 662.5, title: null },
+		]);
+
+		const truncated = trak(3, "text", [], ...samples, table("stco", 2));
+		expect(await readChapters(fileReader(moovOf(truncated)).read)).toEqual([]);
+	});
+
+	it("stops reading titles at the read cap when they are scattered", async () => {
+		// 100 one-sample chunks past the head, 1000 bytes apart : a read per title.
+		const scattered = new Uint8Array(200_000);
+		const offsets: number[] = [];
+		for (let index = 0; index < 100; index += 1) {
+			const title = titleSample(text(`Part ${index + 100}`));
+			scattered.set(title, 100_000 + index * 1000);
+			offsets.push(firstChunk + 100_000 + index * 1000);
+		}
+		const track = trak(
+			3,
+			"text",
+			[],
+			table("stts", 1, 100, 60_000),
+			table("stsc", 1, 1, 1, 1),
+			table("stsz", 10, 100),
+			table("stco", 100, ...offsets),
+		);
+		const file = concat(
+			ftyp,
+			box("mdat", scattered),
+			box("moov", video([3]), track),
+		);
+		const { read, reads } = fileReader(file);
+
+		const chapters = await readChapters(read);
+		expect(chapters).toHaveLength(100);
+		expect(chapters[0]).toEqual({ start: 0, title: "Part 100" });
+		expect(chapters[99]).toEqual({ start: 5940, title: null });
+		expect(reads).toHaveLength(64);
 	});
 });
 

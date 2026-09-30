@@ -1,5 +1,8 @@
 import { redirect } from "@sveltejs/kit";
-import { pullUiSettings } from "#lib/settings/settings-data.js";
+import {
+	pullAppAudioLanguage,
+	pullUiSettings,
+} from "#lib/settings/settings-data.js";
 import { resolve } from "$app/paths";
 import type { LayoutServerLoad } from "./$types";
 
@@ -24,9 +27,11 @@ export const load: LayoutServerLoad = async ({
 		redirect(303, resolve("profiles") + suffix);
 	}
 
-	const ui = await pullUiSettings(
-		locals.nuvio.withFetch(fetch),
-		locals.profileId,
-	);
-	return { profile, ui };
+	// Neither pull rejects : each falls back to defaults on its own.
+	const nuvio = locals.nuvio.withFetch(fetch);
+	const [ui, appAudio] = await Promise.all([
+		pullUiSettings(nuvio, locals.profileId),
+		pullAppAudioLanguage(nuvio, locals.profileId),
+	]);
+	return { profile, ui, appAudio };
 };

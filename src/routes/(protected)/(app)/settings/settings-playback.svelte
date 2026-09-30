@@ -4,6 +4,7 @@
 	import * as Select from "#lib/components/ui/select/index.js";
 	import { Switch } from "#lib/components/ui/switch/index.js";
 	import { getLocale, m } from "#lib/i18n/index.js";
+	import { languageKey } from "#lib/player/audio-language.js";
 	import { theme } from "#lib/settings/theme.svelte.js";
 	import {
 		STREAM_QUALITIES,
@@ -12,6 +13,7 @@
 		WATCH_REGIONS,
 	} from "#lib/settings/ui-settings.js";
 	import { cn } from "#lib/utils.js";
+	import { page } from "$app/state";
 
 	let { update }: { update: (patch: Partial<UiSettings>) => Promise<void> } =
 		$props();
@@ -34,28 +36,67 @@
 	const regionNames = new Intl.DisplayNames([locale], { type: "region" });
 	const capitalise = (text: string) =>
 		text.charAt(0).toLocaleUpperCase(locale) + text.slice(1);
-	const subtitleLanguages: Array<{ value: string; label: string }> = [
+	const languages: Array<{ value: string; label: string }> = (
+		[
+			["eng", "en"],
+			["spa", "es"],
+			["fre", "fr"],
+			["ger", "de"],
+			["por", "pt"],
+			["ita", "it"],
+			["dut", "nl"],
+			["rus", "ru"],
+			["jpn", "ja"],
+			["kor", "ko"],
+			["chi", "zh"],
+			["ara", "ar"],
+		] as const
+	).map(([value, iso]) => ({
+		value,
+		label: capitalise(languageNames.of(iso) ?? value),
+	}));
+	const subtitleLanguages = [
 		{ value: "", label: m.settings_subtitles_off() },
-		...(
-			[
-				["eng", "en"],
-				["spa", "es"],
-				["fre", "fr"],
-				["ger", "de"],
-				["por", "pt"],
-				["ita", "it"],
-				["dut", "nl"],
-				["rus", "ru"],
-				["jpn", "ja"],
-				["kor", "ko"],
-				["chi", "zh"],
-				["ara", "ar"],
-			] as const
-		).map(([value, iso]) => ({
-			value,
-			label: capitalise(languageNames.of(iso) ?? value),
-		})),
+		...languages,
 	];
+
+	// What the Nuvio mobile app has for this profile : read, never written.
+	const appAudio = $derived(
+		(page.data.appAudio?.preferred as string | null | undefined) ?? null,
+	);
+	function audioChoiceLabel(code: string): string {
+		if (code === "default") {
+			return m.settings_audio_language_default();
+		}
+		if (code === "device") {
+			return m.settings_audio_language_device();
+		}
+		if (code === "original") {
+			return m.settings_audio_language_original();
+		}
+		const key = languageKey(code);
+		return (
+			languages.find((entry) => languageKey(entry.value) === key)?.label ??
+			capitalise((key && languageNames.of(key)) || code)
+		);
+	}
+	const audioLanguages = $derived([
+		{
+			value: "",
+			label: appAudio
+				? m.settings_audio_language_app_value({
+						language: audioChoiceLabel(appAudio),
+					})
+				: m.settings_audio_language_app(),
+		},
+		{ value: "default", label: m.settings_audio_language_default() },
+		{ value: "device", label: m.settings_audio_language_device() },
+		...languages,
+	]);
+	const audioLabel = $derived(
+		audioLanguages.find((entry) => entry.value === theme.current.audioLanguage)
+			?.label ?? audioChoiceLabel(theme.current.audioLanguage),
+	);
 
 	const qualityLabel = (q: string) =>
 		q === "auto" ? m.settings_quality_auto() : q;
@@ -174,6 +215,31 @@
       </Select.Root>
       <span class="text-xs text-muted-foreground">
         {m.settings_region_hint()}
+      </span>
+    </div>
+
+    <div class="flex flex-col gap-2.5">
+      <span class="text-sm font-medium" id="audio-lang-label"
+        >{m.settings_audio_language()}</span
+      >
+      <Select.Root
+        type="single"
+        value={theme.current.audioLanguage}
+        onValueChange={(v) => update({ audioLanguage: v })}
+      >
+        <Select.Trigger aria-labelledby="audio-lang-label" class="w-64">
+          {audioLabel}
+        </Select.Trigger>
+        <Select.Content>
+          {#each audioLanguages as option (option.value)}
+            <Select.Item value={option.value} label={option.label}>
+              {option.label}
+            </Select.Item>
+          {/each}
+        </Select.Content>
+      </Select.Root>
+      <span class="text-xs text-muted-foreground">
+        {m.settings_audio_language_hint()}
       </span>
     </div>
 

@@ -12,6 +12,8 @@ export function createPlayerLoadLifecycle(deps: {
 	video: () => HTMLVideoElement | null;
 	src: () => string;
 	startTime: () => number;
+	/** Re-mux a file `<video>` refused in the browser. False when it can't. */
+	tryRemux: () => Promise<boolean>;
 	onFatal: (message: string) => void;
 	onEnded?: () => void;
 }) {
@@ -71,10 +73,15 @@ export function createPlayerLoadLifecycle(deps: {
 		const code = mediaError?.code;
 
 		// `SRC_NOT_SUPPORTED` (4) means the container/codec can't be played at
-		// all : no point retrying.
+		// all : no point retrying, but a refused container can be re-muxed.
 		if (!mediaError || code === mediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
-			deps.onFatal(m.player_error_unsupported());
-			deps.state.loading = false;
+			const src = deps.src();
+			void deps.tryRemux().then((fixed) => {
+				if (!fixed && deps.src() === src) {
+					deps.onFatal(m.player_error_unsupported());
+					deps.state.loading = false;
+				}
+			});
 			return;
 		}
 

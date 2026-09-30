@@ -377,8 +377,15 @@
 	}
 	body {
 		@apply bg-background text-foreground;
-		-webkit-font-smoothing: antialiased;
 		text-rendering: optimizelegibility;
+	}
+	/* Grayscale smoothing only where the pixels are dense enough to carry it.
+	   On a standard-density screen it strips macOS's stem darkening and text
+	   turns thin and jagged; there the system default reads better. */
+	@media (min-resolution: 2dppx) {
+		body {
+			-webkit-font-smoothing: antialiased;
+		}
 	}
 
 	::selection {

@@ -5,6 +5,7 @@
 	import PlayIcon from "@lucide/svelte/icons/play";
 	import RotateCcwIcon from "@lucide/svelte/icons/rotate-ccw";
 	import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
+	import { untrack } from "svelte";
 	import { toast } from "svelte-sonner";
 	import { similarTitles } from "#lib/addons/addons.remote.js";
 	import { Button } from "#lib/components/ui/button/index.js";
@@ -13,6 +14,7 @@
 	import { downloads, playbackUrl } from "#lib/downloads/manager.svelte.js";
 	import { playbackSubtitles } from "#lib/downloads/subtitles.js";
 	import { m } from "#lib/i18n/index.js";
+	import { audioLanguageTargets } from "#lib/player/audio-language.js";
 	import { browserCanPlayCodec } from "#lib/player/codec-support.js";
 	import PlayerEndPanel from "#lib/player/components/end-panel.svelte";
 	import PlayerEpisodesPanel from "#lib/player/components/episodes-panel.svelte";
@@ -28,7 +30,10 @@
 		forgetLink,
 		playbackHandoff,
 		recallLink,
+		recallPick,
 		rememberLink,
+		rememberPick,
+		type SelectedStream,
 	} from "#lib/watch/playback.svelte.js";
 	import {
 		parseVideoId,
@@ -48,7 +53,7 @@
 	import { watchProviders } from "#lib/watch/watch-providers.remote.js";
 	import WatchProvidersList from "#lib/watch/watch-providers-list.svelte";
 	import { browser } from "$app/env";
-	import { goto } from "$app/navigation";
+	import { goto, replaceState } from "$app/navigation";
 	import { resolve } from "$app/paths";
 	import { page } from "$app/state";
 
@@ -176,10 +181,55 @@
 	const download = $derived(downloads.find(id));
 	const offlineSrc = $derived(download ? playbackUrl(download) : null);
 
-	// The stream picked on /streams; else a remembered link (if "reuse last link"
-	// is on and it's still fresh); else resolve one here on a cold load.
+	// What a reload must bring back rides in the query string : the stream (by
+	// key, see `rememberPick`), the position, the boost and the audio track. Read
+	// once per video; the writes below never re-trigger it.
+	const restored = $derived.by(() => {
+		void id;
+		return untrack(() => {
+			const query = page.url.searchParams;
+			const number = (name: string) =>
+				query.has(name) && Number.isFinite(Number(query.get(name)))
+					? Number(query.get(name))
+					: null;
+			return {
+				stream: query.get("stream"),
+				time: number("t"),
+				boost: number("boost"),
+				audio: number("audio"),
+			};
+		});
+	});
+
+	function setQuery(patch: Record<string, string | null>) {
+		if (!browser) {
+			return;
+		}
+		const url = new URL(location.href);
+		for (const [name, value] of Object.entries(patch)) {
+			if (value === null) {
+				url.searchParams.delete(name);
+			} else {
+				url.searchParams.set(name, value);
+			}
+		}
+		if (url.href === location.href) {
+			return;
+		}
+		try {
+			replaceState(url, page.state);
+		} catch {
+			// router not up yet : the next progress tick writes it
+		}
+	}
+
+	// The stream just picked in the drawer; else the one the URL names; else the
+	// tab's last pick; else a remembered link (if "reuse last link" is on and
+	// it's still fresh); else resolve one here on a cold load.
 	const handed = $derived(
-		playbackHandoff.take(id) ??
+		playbackHandoff.fresh(id) ??
+			recallPick(id, restored.stream, theme.current.linkCacheDays) ??
+			playbackHandoff.take(id) ??
 			(theme.current.reuseLastLink
 				? recallLink(id, theme.current.linkCacheDays)
 				: null),
@@ -265,10 +315,45 @@
 	// Bumped by "Watch again" to remount the player and replay from the start.
 	let replayNonce = $state(0);
 
+	// Once this page has reported progress, the URL's position is history : a
+	// player remounted on another source resumes from the saved one.
+	let progressed = $state(false);
+
 	// Always pick up where the viewer left off : no "resume vs start over" prompt.
-	// "Watch again" (replayNonce > 0) restarts from the top.
+	// The URL's own position (a reload) beats the saved one. "Watch again"
+	// (replayNonce > 0) restarts from the top.
 	const startTime = $derived(
-		replayNonce === 0 && resume ? resume.position / 1000 : 0,
+		replayNonce > 0
+			? 0
+			: ((progressed ? null : restored.time) ??
+					(resume ? resume.position / 1000 : 0)),
+	);
+
+	// Boost and audio track as the viewer last set them, for the query string
+	// and for a player remounted on another source.
+	const restoredSettings = () => ({
+		boost: restored.boost ?? 1,
+		audio: restored.audio,
+	});
+	let playbackSettings = $state(untrack(restoredSettings));
+	$effect(() => {
+		playbackSettings = restoredSettings();
+	});
+
+	// The preferred audio language : this profile's web setting, else what the
+	// Nuvio mobile app has.
+	const audioLanguages = $derived(
+		theme.current.audioLanguage
+			? audioLanguageTargets(
+					theme.current.audioLanguage,
+					null,
+					browser ? navigator.languages : [],
+				)
+			: audioLanguageTargets(
+					data.appAudio.preferred,
+					data.appAudio.secondary,
+					browser ? navigator.languages : [],
+				),
 	);
 
 	// "S1E2 · Name" from the meta, never the stream's release name (that lives
@@ -304,23 +389,51 @@
 
 	let linkRemembered = false;
 
+	const selection = $derived<SelectedStream | null>(
+		active?.url
+			? {
+					videoId: id,
+					url: active.url,
+					externalUrl: active.externalUrl ?? null,
+					notWebReady: Boolean(active.notWebReady),
+					label: active.label ?? context.heading,
+					addonName: active.addonName ?? "",
+					infoHash: active.infoHash ?? null,
+					audioRisky,
+					videoRisky: videoCodec !== null,
+					videoCodec,
+				}
+			: null,
+	);
+
+	// Name the playing stream and the player settings in the URL. An audio track
+	// index means nothing on another stream, so a new stream drops it.
+	let namedStream: string | null = null;
+	$effect(() => {
+		if (!selection) {
+			return;
+		}
+		const key = untrack(() => rememberPick(selection));
+		if (namedStream !== null && namedStream !== key) {
+			playbackSettings.audio = null;
+		}
+		namedStream = key;
+		const { boost, audio } = playbackSettings;
+		setQuery({
+			stream: key,
+			boost: boost > 1 ? String(boost) : null,
+			audio: audio === null ? null : String(audio),
+		});
+	});
+
 	function report(position: number, duration: number) {
+		progressed = true;
+		setQuery({ t: String(Math.floor(position)) });
 		// First progress tick means the stream actually played : remember its URL
 		// for "reuse last link".
-		if (!linkRemembered && position > 2 && active?.url) {
+		if (!linkRemembered && position > 2 && selection) {
 			linkRemembered = true;
-			rememberLink({
-				videoId: id,
-				url: active.url,
-				externalUrl: active.externalUrl ?? null,
-				notWebReady: Boolean(active.notWebReady),
-				label: active.label ?? context.heading,
-				addonName: active.addonName ?? "",
-				infoHash: active.infoHash ?? null,
-				audioRisky,
-				videoRisky: videoCodec !== null,
-				videoCodec,
-			});
+			rememberLink(selection);
 		}
 		if (!resumeKnown) {
 			return;
@@ -443,6 +556,7 @@
 	}
 
 	function watchAgain() {
+		setQuery({ t: null });
 		endOfShow = false;
 		trueEnd = false;
 		cancelUpNext();
@@ -455,6 +569,8 @@
 		replayNonce = 0;
 		trueEnd = false;
 		linkRemembered = false;
+		namedStream = null;
+		progressed = false;
 		return cancelUpNext;
 	});
 
@@ -595,6 +711,15 @@
         subtitleColor={theme.current.subtitleColor}
         subtitleBackground={theme.current.subtitleBackground}
         preferredLanguage={theme.current.subtitleLanguage}
+        {audioLanguages}
+        initialAudioTrack={playbackSettings.audio}
+        initialBoost={playbackSettings.boost}
+        onPlaybackSettings={(patch) => {
+          playbackSettings = {
+            boost: patch.boost ?? playbackSettings.boost,
+            audio: patch.audioTrack ?? playbackSettings.audio,
+          };
+        }}
         {audioRisky}
         videoRisky={videoCodec !== null}
         externalUrl={active?.url ?? active?.externalUrl ?? null}

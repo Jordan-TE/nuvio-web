@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Chapter } from "#lib/player/chapters.js";
 	import { formatTime } from "#lib/player/format.js";
+	import type { PlayerMenu } from "#lib/player/state/panel-toggles.svelte.js";
 	import type { createPlayerTransportActions } from "#lib/player/state/transport-actions.svelte.js";
 	import type { PlayerTransportState } from "#lib/player/state/transport-state.svelte.js";
 	import { cn } from "#lib/utils.js";
@@ -17,7 +18,7 @@
 		fatalError,
 		infoOpen,
 		subtitlesOpen,
-		settingsOpen,
+		openMenu,
 		title,
 		subheading = null,
 		hasInfo,
@@ -35,7 +36,7 @@
 		casting,
 		onCast,
 		onToggleSubtitles,
-		onSettingsOpenChange,
+		onMenuOpenChange,
 		boost,
 		boostPending,
 		onBoostSelect,
@@ -51,7 +52,7 @@
 		fatalError: boolean;
 		infoOpen: boolean;
 		subtitlesOpen: boolean;
-		settingsOpen: boolean;
+		openMenu: PlayerMenu | null;
 		title: string;
 		subheading?: string | null;
 		hasInfo: boolean;
@@ -69,7 +70,7 @@
 		casting: boolean;
 		onCast: () => void;
 		onToggleSubtitles: () => void;
-		onSettingsOpenChange: (open: boolean) => void;
+		onMenuOpenChange: (menu: PlayerMenu, open: boolean) => void;
 		boost: number;
 		boostPending: boolean;
 		onBoostSelect: (level: number) => void;
@@ -148,8 +149,8 @@
       {onCast}
       {subtitlesOpen}
       {onToggleSubtitles}
-      {settingsOpen}
-      {onSettingsOpenChange}
+      {openMenu}
+      {onMenuOpenChange}
       {boost}
       {boostPending}
       {onBoostSelect}

@@ -21,12 +21,16 @@ interface SilentAudioDeps {
 	blocked: () => boolean;
 	/** Called when the watch flips to an alternate HLS audio track. */
 	onTrackSwitch: (index: number) => void;
+	/** The in-browser fix : true when the source now has sound. */
+	tryFix: (reason: "probe" | "silent") => Promise<boolean>;
 }
 
 /**
  * Watch a playing `<video>` for "picture plays, no sound" : an undecodable audio
  * codec (Dolby Digital / DTS / Atmos …) or a file with no audio track. Non-fatal:
- * `.issue` drives a dismissible banner. Re-arms whenever `src()` changes.
+ * `tryFix` gets a go first : it probes the file as playback starts, and again
+ * once silence is confirmed : and only when it can't help does `.issue` drive a
+ * dismissible banner. Re-arms whenever `src()` changes.
  *
  * The decision logic is the pure `evaluateAudioTick` / `classifyAudioSamples` in
  * `silent-audio.ts`; this rune just owns the timer, the sample buffer and the
@@ -44,6 +48,7 @@ export function createSilentAudioWatch(deps: SilentAudioDeps) {
 		if (!video) {
 			return;
 		}
+		void deps.tryFix("probe");
 		const el = video as HTMLVideoElement & {
 			webkitAudioDecodedByteCount?: number;
 			webkitVideoDecodedByteCount?: number;
@@ -59,6 +64,7 @@ export function createSilentAudioWatch(deps: SilentAudioDeps) {
 		const samples: AudioByteSample[] = [];
 		let playedSeconds = 0;
 		let trackTried = false;
+		let stale = false;
 
 		function recordSample() {
 			if (!haveCounters) {
@@ -104,13 +110,21 @@ export function createSilentAudioWatch(deps: SilentAudioDeps) {
 				return;
 			}
 			if (action.kind === "flag") {
-				issue = action.issue;
 				clearInterval(timer);
+				const flagged = action.issue;
+				void deps.tryFix("silent").then((fixed) => {
+					if (!(fixed || stale)) {
+						issue = flagged;
+					}
+				});
 			}
 		}
 
 		const timer = setInterval(tick, 1000);
-		return () => clearInterval(timer);
+		return () => {
+			stale = true;
+			clearInterval(timer);
+		};
 	});
 
 	return {

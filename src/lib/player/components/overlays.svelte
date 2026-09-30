@@ -21,6 +21,7 @@
 		detailHref = "",
 		minimized,
 		loading,
+		loadingLabel,
 		fatalError,
 		silentAudioIssue,
 		videoDecodeIssue,
@@ -47,6 +48,7 @@
 		detailHref?: string;
 		minimized: boolean;
 		loading: boolean;
+		loadingLabel: string;
 		fatalError: string | null;
 		silentAudioIssue: AudioIssue | null;
 		videoDecodeIssue: boolean;
@@ -71,7 +73,7 @@
     {title}
     {certification}
     {genres}
-    label={m.player_loading_stream()}
+    label={loadingLabel}
   />
 {/if}
 

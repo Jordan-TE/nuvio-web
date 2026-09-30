@@ -30,7 +30,9 @@ export default defineConfig({
 				experimental: { async: true },
 			},
 			adapter: adapter({
-				compile: true,
+				buildOptions: {
+					compile: true,
+				},
 			}),
 			experimental: {
 				remoteFunctions: true,

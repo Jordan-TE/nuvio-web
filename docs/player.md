@@ -23,9 +23,41 @@ else goes to the `<video>` element's own `src`. Audio-track switching works on
 either.
 
 Before a stream reaches `<video>`, its codec is probed. Playback that decodes no
-frames (an unsupported HEVC or AV1 stream) or produces no audio (Dolby Digital,
-DTS, Atmos) raises a dismissible banner naming the problem, instead of leaving
-you with a black screen or silence and no explanation.
+frames (an unsupported HEVC or AV1 stream) raises a dismissible banner naming
+the problem, instead of leaving you with a black screen and no explanation.
+
+A direct file the browser can't play as is gets fixed **in the browser**: the
+player reads the file itself, passes the video through untouched, and feeds the
+result to `<video>` through Media Source Extensions. The stream never goes
+through the server. Two things trigger it:
+
+- **Audio the browser doesn't decode** (Dolby Digital, Dolby Digital Plus, DTS).
+  It is decoded with WebAssembly and re-encoded to stereo, and the stream loader
+  says so while it switches. The player reads the file's audio tracks as
+  playback starts and switches straight away; the silence check a few seconds in
+  is only a backstop. Surround is not preserved.
+- **A container the browser refuses** (Matroska where `<video>` doesn't play
+  it). Audio the browser decodes is copied as is.
+
+It needs a host that allows cross-origin range reads and a browser with
+`MediaSource`. When either is missing, or the audio is a format it doesn't
+decode (TrueHD), you get the banner or the error screen as before.
+
+## Audio track
+
+A file with more than one audio track starts on your **preferred audio
+language** (Settings → Playback) when it has one, and the audio button in the
+control bar switches between them. Browsers that can't switch tracks in a plain
+file get the in-browser fix above for that, with the audio copied untouched.
+
+## Reloading
+
+The player's address carries what a reload needs: the stream that is playing,
+the position, the volume boost and the audio track. The stream is a short key,
+not its URL: the link itself stays in this browser's storage, so a debrid URL
+never lands in the address bar, the history, or a link you paste to someone.
+Opened in another browser, the key means nothing and a stream is resolved as
+usual.
 
 ## Subtitles
 
@@ -61,17 +93,19 @@ affordances.
 
 ## Volume boost
 
-The settings menu (the gauge) boosts volume to 150%, 200% or 300%, with a badge
-beside the volume slider while it's on. Audio goes through Web Audio: a gain,
-then a limiter, so loud peaks saturate instead of clipping. Nothing is routed
-until you first pick a boost, so normal playback never touches Web Audio.
+The speaker button beside the volume slider boosts volume to 150%, 200% or 300%,
+with a badge beside the volume slider while it's on. Audio goes through Web
+Audio: a gain, then a limiter, so loud peaks saturate instead of clipping.
+Nothing is routed until you first pick a boost, so normal playback never touches
+Web Audio.
 
 HLS streams, downloads and same-origin files can always be boosted. A direct
 file from another host can only be boosted when that host sends CORS headers,
 because Web Audio plays a cross-origin file loaded without CORS as silence. A
 one-byte probe checks first; if it passes, the video reloads with CORS at the
 same position, and if not you get a notice and playback carries on untouched.
-The boost resets when the source changes.
+The boost stays on for the title you're watching, across sources and reloads,
+and resets when you move to another one.
 
 ## Chapters
 
@@ -79,13 +113,13 @@ The scrub bar marks chapter boundaries, and hovering it names the chapter under
 the cursor.
 
 A file's own chapters come first: Matroska / WebM `Chapters` and MP4 Nero
-`chpl`. The browser reads them from the container's metadata with a few small
-`Range` requests. The server never touches a stream's bytes, and the reads stop
-short of the media: a Matroska walk ends at the first `Cluster`, and an MP4 walk
-skips `mdat` by its size. A host that doesn't answer with CORS headers, or that
+`chpl`, else an MP4 QuickTime chapter track. The browser reads them from the
+container's metadata with a few small `Range` requests. The server never touches
+a stream's bytes, and the reads stop short of the media: a Matroska walk ends at
+the first `Cluster`, and an MP4 walk skips `mdat` by its size, going in only for
+a chapter track's titles. A host that doesn't answer with CORS headers, or that
 ignores `Range`, just yields no chapters. A `200` is aborted unread, so the file
-is never downloaded twice. HLS streams and MP4 QuickTime chapter tracks aren't
-read.
+is never downloaded twice. HLS streams aren't read.
 
 When the file has no chapters, the intro and credits timestamps above stand in
 as "Intro" and "Credits".

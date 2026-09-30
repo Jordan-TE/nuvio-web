@@ -2,9 +2,19 @@
 
 ## Open
 
-- [ ] **Chapters: MP4 QuickTime chapter tracks** (`tref/chap` + a text track)
-      aren't read, only Nero `chpl`, and neither is HLS. Add if real files show
-      markers missing.
+- [ ] **In-browser fix: confirm on real debrid hosts.** Proven on local fixtures
+      only (H.264 + E-AC-3, HEVC Main10 + DTS, VP9 + AC-3), in Chrome and
+      Playwright's Chromium. Unknown: which hosts send CORS headers, how a 60 GB
+      remux behaves (MKV cue lookup over the network, `SourceBuffer` quota at 80
+      Mbit/s), and Firefox / Safari, where the refused-container path matters
+      most. The e2e account has no stream addon, so this needs a real profile.
+- [ ] **Audio language: "original" isn't honoured.** The mobile app's "original
+      language" choice needs the title's original language, which the player
+      doesn't have; it falls back to the secondary language, then the file's
+      default.
+- [ ] **MP4 chapter tracks: confirm on files ffmpeg didn't write.** Apple,
+      HandBrake and MP4Box output are untested; edit lists, `stz2` and
+      fragmented MP4 aren't handled.
 
 - [ ] **Bebop stills: confirm in the real profile.** `getMeta` now skips a meta
       whose IMDb / TMDB / Kitsu id contradicts the requested one, which fixes

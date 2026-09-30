@@ -42,10 +42,11 @@ the real cause:
 
 - **No frames** — usually HEVC or AV1 that this browser cannot decode. Try
   another source from the drawer, or open it in an external player.
-- **No audio** — usually Dolby Digital, DTS or Atmos. Browsers do not decode
-  these. Same fix.
-
-This is a limit of what browsers decode, not something the app can work around.
+- **No audio**: usually Dolby Digital, DTS or Atmos, which browsers do not
+  decode. The player converts Dolby Digital, Dolby Digital Plus and DTS to
+  stereo in the browser as playback starts. The banner only appears when that
+  isn't possible: the stream's host refuses cross-origin reads, the audio is
+  TrueHD only, or the file has no audio track. Same fix as above.
 
 ## Casting does not appear
 

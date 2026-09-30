@@ -79,6 +79,10 @@ export const uiSettingsSchema = v.object({
 	subtitleColor: v.fallback(v.string(), "#ffffff"),
 	/** Semi-opaque black plate behind the text. */
 	subtitleBackground: v.fallback(v.boolean(), true),
+	/** Audio track picked when a file carries several : a language code, `device`
+	 *  (the browser's languages), `default` (the file's own), or "" to follow
+	 *  the Nuvio mobile app's setting. */
+	audioLanguage: v.fallback(v.string(), ""),
 	/** ISO-ish language code auto-selected when a stream has matching subs; "" = off. */
 	subtitleLanguage: v.fallback(v.string(), ""),
 	/** Country for the "where to watch" lookup; "auto" = derive from the browser. */
@@ -113,6 +117,7 @@ export const DEFAULT_UI_SETTINGS: UiSettings = {
 	subtitleSize: "medium",
 	subtitleColor: "#ffffff",
 	subtitleBackground: true,
+	audioLanguage: "",
 	subtitleLanguage: "",
 	watchRegion: "auto",
 	librarySource: "nuvio",

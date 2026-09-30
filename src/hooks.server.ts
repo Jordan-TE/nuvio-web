@@ -33,11 +33,12 @@ function hooksLogger() {
 // `'unsafe-inline'` on script-src is unavoidable without SvelteKit's CSP nonce
 // integration (no svelte.config.js in this setup). Everything else is locked
 // down. In dev, Vite's HMR websocket and eval need extra room.
+// `'wasm-unsafe-eval'` is for the player's in-browser audio decoders.
 const CONTENT_SECURITY_POLICY = [
 	"default-src 'self'",
 	dev
 		? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
-		: "script-src 'self' 'unsafe-inline'",
+		: "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
 	"style-src 'self' 'unsafe-inline'",
 	"img-src 'self' https: http: data: blob:",
 	"media-src 'self' https: blob:",

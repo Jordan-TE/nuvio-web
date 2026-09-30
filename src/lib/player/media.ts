@@ -16,11 +16,18 @@ export type VideoWithAudioTracks = HTMLVideoElement & {
 	audioTracks?: NativeAudioTrackList;
 };
 
+export interface AudioTrackOption {
+	id: number;
+	label: string;
+	/** As the source spells it (`fr`, `fre`, …), or empty when it doesn't say. */
+	language: string;
+}
+
 export function nativeAudioSnapshot(list: NativeAudioTrackList): {
-	tracks: Array<{ id: number; label: string }>;
+	tracks: AudioTrackOption[];
 	active: number;
 } {
-	const tracks: Array<{ id: number; label: string }> = [];
+	const tracks: AudioTrackOption[] = [];
 	let active = -1;
 	for (let index = 0; index < list.length; index++) {
 		const track = list[index];
@@ -30,6 +37,7 @@ export function nativeAudioSnapshot(list: NativeAudioTrackList): {
 				track.label ||
 				track.language ||
 				m.player_audio_track_fallback({ number: index + 1 }),
+			language: track.language,
 		});
 		if (track.enabled) {
 			active = index;
@@ -44,10 +52,7 @@ export function nativeAudioSnapshot(list: NativeAudioTrackList): {
  *  (Safari, or a single-track file). */
 export function attachNativeAudioTracks(
 	el: VideoWithAudioTracks,
-	onChange: (
-		tracks: Array<{ id: number; label: string }>,
-		active: number,
-	) => void,
+	onChange: (tracks: AudioTrackOption[], active: number) => void,
 ): (() => void) | undefined {
 	const list = el.audioTracks;
 	if (!list) {

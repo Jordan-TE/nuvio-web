@@ -83,7 +83,7 @@
     {#snippet child({ props })}
       <div
         {...props}
-        class="absolute inset-0 z-20 overflow-hidden outline-none"
+        class="@container absolute inset-0 z-20 overflow-hidden outline-none"
         transition:fade={reduced({ duration: 150 })}
       >
         <div class="absolute inset-0 bg-black/85"></div>
@@ -95,7 +95,7 @@
           transition:fly={reduced({ y: 16, duration: 220 })}
         >
           <div
-            class="flex max-h-full w-full max-w-4xl flex-col gap-4 text-white"
+            class="flex max-h-full w-full max-w-4xl flex-col gap-4 text-white @7xl:max-w-6xl @7xl:gap-6 @[96rem]:max-w-7xl"
           >
             <div class="flex shrink-0 items-center gap-3">
               <span
@@ -117,30 +117,30 @@
             </div>
 
             <div
-              class="flex min-h-0 flex-1 gap-7 overflow-y-auto pr-1 scrollbar-thin md:gap-10"
+              class="flex min-h-0 flex-1 gap-7 overflow-y-auto pr-1 scrollbar-thin md:gap-10 @7xl:gap-14"
             >
               {#if poster}
                 <img
                   src={poster}
                   alt=""
-                  class="hidden w-40 shrink-0 self-start rounded-2xl object-cover shadow-[0_40px_80px_-24px_rgba(0,0,0,0.9)] ring-1 ring-white/10 md:block lg:w-52"
+                  class="hidden w-40 shrink-0 self-start rounded-2xl object-cover shadow-[0_40px_80px_-24px_rgba(0,0,0,0.9)] ring-1 ring-white/10 md:block lg:w-52 @7xl:w-72 @[96rem]:w-80"
                 />
               {/if}
 
-              <div class="flex min-w-0 flex-1 flex-col gap-4">
+              <div class="flex min-w-0 flex-1 flex-col gap-4 @7xl:gap-6">
                 {#if logo && !logoBroken}
                   <img
                     src={logo}
                     alt={title}
                     onerror={() => (logoBroken = true)}
-                    class="max-h-20 max-w-64 self-start object-contain object-left drop-shadow-lg"
+                    class="max-h-20 max-w-64 self-start object-contain object-left drop-shadow-lg @7xl:max-h-32 @7xl:max-w-md"
                   />
                   {#if info.episodeTitle}
-                    <h2 class="text-xl font-semibold">{info.episodeTitle}</h2>
+                    <h2 class="text-xl font-semibold @7xl:text-2xl">{info.episodeTitle}</h2>
                   {/if}
                 {:else}
                   <h2
-                    class="text-2xl font-bold tracking-tight text-balance sm:text-3xl"
+                    class="text-2xl font-bold tracking-tight text-balance sm:text-3xl @7xl:text-5xl"
                   >
                     {headline}
                   </h2>
@@ -148,7 +148,7 @@
 
                 {#if info.imdbRating || metaBits.length > 0 || genres.length > 0}
                   <div
-                    class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm font-medium text-white/70"
+                    class="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm font-medium text-white/70 @7xl:text-base"
                   >
                     {#if info.imdbRating}
                       <ImdbRating
@@ -165,7 +165,7 @@
                       <span class="flex flex-wrap gap-1.5">
                         {#each genres.slice(0, 4) as genre (genre)}
                           <span
-                            class="rounded-full bg-white/10 px-2 py-0.5 text-xs"
+                            class="rounded-full bg-white/10 px-2 py-0.5 text-xs @7xl:px-2.5 @7xl:text-sm"
                           >
                             {genre}
                           </span>
@@ -175,20 +175,24 @@
                   </div>
                 {/if}
 
-                <p class="max-w-2xl text-sm leading-relaxed text-white/85">
+                <p
+                  class="max-w-2xl text-sm leading-relaxed text-white/85 @7xl:max-w-3xl @7xl:text-lg"
+                >
                   {synopsis}
                 </p>
 
                 {#if info.episodeOverview && info.description}
                   <p
-                    class="line-clamp-3 max-w-2xl text-xs leading-relaxed text-white/55"
+                    class="line-clamp-3 max-w-2xl text-xs leading-relaxed text-white/55 @7xl:max-w-3xl @7xl:text-sm"
                   >
                     {info.description}
                   </p>
                 {/if}
 
                 {#if facts.length > 0}
-                  <dl class="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
+                  <dl
+                    class="grid max-w-3xl gap-x-8 gap-y-2 text-sm sm:grid-cols-2 @7xl:gap-y-4 @7xl:text-base"
+                  >
                     {#each facts as [label, value] (label)}
                       <div class="flex flex-col">
                         <dt
