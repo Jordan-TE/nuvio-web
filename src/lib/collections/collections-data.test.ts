@@ -8,10 +8,11 @@ vi.mock("#lib/addons/server.js", () => ({
 }));
 
 import type { MetaPreview } from "#lib/addons/types.js";
-import type { CollectionFolder } from "#lib/nuvio/index.js";
+import type { CollectionFolder, NuvioClient } from "#lib/nuvio/index.js";
 import {
 	type CatalogFetcher,
 	folderContents,
+	pullCollections,
 	pullFolderContents,
 } from "./collections-data.ts";
 
@@ -129,5 +130,55 @@ describe("pullFolderContents", () => {
 			folders: [folder("f1", ["a"])],
 		});
 		expect(result[0].metas.map((entry) => entry.id)).toEqual(["m1"]);
+	});
+});
+
+describe("pullCollections", () => {
+	const nuvio = (collections_json: unknown) =>
+		({
+			collections: { pull: async () => [{ collections_json }] },
+		}) as unknown as NuvioClient;
+
+	it("de-dupes collections and folders by id like the Nuvio apps: first slot, last value", async () => {
+		const result = await pullCollections(
+			nuvio([
+				{ id: "a", title: "A1", folders: [] },
+				{
+					id: "b",
+					title: "B",
+					folders: [
+						{ id: "f", title: "F1" },
+						{ id: "f", title: "F2" },
+					],
+				},
+				{ id: "a", title: "A2", folders: [] },
+			]),
+			1,
+		);
+		expect(result.map((entry) => entry.title)).toEqual(["A2", "B"]);
+		expect(result[1].folders.map((entry) => entry.title)).toEqual(["F2"]);
+	});
+
+	it("parses a string blob and drops what the pages cannot key", async () => {
+		const result = await pullCollections(
+			nuvio(
+				JSON.stringify([
+					{ id: "a", title: "A" },
+					{ title: "no id", folders: [] },
+					"junk",
+					{ id: "b", title: "B", folders: [{ title: "no id" }, null] },
+				]),
+			),
+			1,
+		);
+		expect(result).toEqual([
+			{ id: "a", title: "A", folders: [] },
+			{ id: "b", title: "B", folders: [] },
+		]);
+	});
+
+	it("is [] for a blob that is not a list", async () => {
+		expect(await pullCollections(nuvio("{not json"), 1)).toEqual([]);
+		expect(await pullCollections(nuvio({ id: "a" }), 1)).toEqual([]);
 	});
 });
