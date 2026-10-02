@@ -14,7 +14,47 @@ export async function pullCollections(
 	profileId: number,
 ): Promise<Collection[]> {
 	const blobs = await nuvio.collections.pull(profileId).catch(() => []);
-	return blobs[0]?.collections_json ?? [];
+	return normalizeCollections(blobs[0]?.collections_json);
+}
+
+type Keyed = Record<string, unknown> & { id: string; title: string };
+
+function isKeyed(value: unknown): value is Keyed {
+	const entry = value as Partial<Keyed> | null;
+	return typeof entry?.id === "string" && typeof entry.title === "string";
+}
+
+/** Same as the Nuvio apps: the first slot, the last value. */
+function byId<T extends Keyed>(entries: T[]): T[] {
+	return [...new Map(entries.map((entry) => [entry.id, entry])).values()];
+}
+
+/**
+ * Every Nuvio client and a few third-party tools write this blob, and the
+ * pages key their lists by id: a repeated or missing id throws at render.
+ */
+function normalizeCollections(raw: unknown): Collection[] {
+	let list = raw;
+	if (typeof raw === "string") {
+		try {
+			list = JSON.parse(raw);
+		} catch {
+			return [];
+		}
+	}
+	if (!Array.isArray(list)) {
+		return [];
+	}
+	return byId(
+		list.filter(isKeyed).map((collection) => ({
+			...collection,
+			folders: byId(
+				Array.isArray(collection.folders)
+					? collection.folders.filter(isKeyed)
+					: [],
+			),
+		})),
+	) as Collection[];
 }
 
 /** The slice of `AddonClient` this needs, so tests can hand in a fake. */

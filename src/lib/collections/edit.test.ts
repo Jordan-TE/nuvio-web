@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Collection } from "#lib/nuvio/index.js";
 import {
 	addFolder,
+	effectiveTileShape,
 	effectiveViewMode,
 	moveFolder,
 	removeFolder,
@@ -100,6 +101,71 @@ describe("updateFolder", () => {
 			updateFolder(collections(), "c1", "a", { title: "  " })[0].folders[0]
 				.title,
 		).toBe("A");
+	});
+
+	// The apps read `sources` before `catalogSources`: it has to follow the
+	// picks, while keeping what this client cannot edit (TMDB, a genre).
+	it("re-points an app folder's sources and keeps what it cannot edit", () => {
+		const top = { addonId: "a", type: "movie", catalogId: "top" };
+		const folder = {
+			id: "f",
+			title: "F",
+			focusGifUrl: "https://img.example/x.gif",
+			sources: [
+				{ provider: "tmdb", tmdbSourceType: "LIST", tmdbId: 42 },
+				{ provider: "addon", ...top, genre: "Action" },
+				{ provider: "addon", addonId: "a", type: "movie", catalogId: "old" },
+			],
+			catalogSources: [
+				{ ...top, genre: "Action" },
+				{ addonId: "a", type: "movie", catalogId: "old" },
+			],
+		};
+		const next = updateFolder(
+			[{ id: "c", title: "C", folders: [folder] }],
+			"c",
+			"f",
+			{
+				catalogSources: [
+					top,
+					{ addonId: "a", type: "series", catalogId: "new" },
+				],
+			},
+		);
+		expect(next[0].folders[0]).toEqual({
+			id: "f",
+			title: "F",
+			focusGifUrl: "https://img.example/x.gif",
+			sources: [
+				{ provider: "tmdb", tmdbSourceType: "LIST", tmdbId: 42 },
+				{ provider: "addon", ...top, genre: "Action" },
+				{ provider: "addon", addonId: "a", type: "series", catalogId: "new" },
+			],
+			catalogSources: [
+				{ ...top, genre: "Action" },
+				{ addonId: "a", type: "series", catalogId: "new" },
+			],
+		});
+	});
+
+	it("adds no sources list to a folder that had none", () => {
+		const picks = [{ addonId: "a", type: "movie", catalogId: "top" }];
+		expect(
+			updateFolder(collections(), "c1", "a", { catalogSources: picks })[0]
+				.folders[0],
+		).toEqual({ id: "a", title: "A", catalogSources: picks });
+	});
+});
+
+describe("effectiveTileShape", () => {
+	it("reads the shapes every client writes", () => {
+		expect(effectiveTileShape("LANDSCAPE")).toBe("LANDSCAPE");
+		expect(effectiveTileShape("landscape")).toBe("LANDSCAPE");
+		expect(effectiveTileShape("wide")).toBe("LANDSCAPE");
+		expect(effectiveTileShape("square")).toBe("SQUARE");
+		expect(effectiveTileShape("poster")).toBe("POSTER");
+		expect(effectiveTileShape(null)).toBe("POSTER");
+		expect(effectiveTileShape(undefined)).toBe("POSTER");
 	});
 });
 

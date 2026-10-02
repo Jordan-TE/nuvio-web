@@ -1,7 +1,10 @@
 import type {
+	CatalogSource,
 	Collection,
 	CollectionFolder,
+	CollectionSource,
 	CollectionViewMode,
+	PosterShape,
 } from "#lib/nuvio/index.js";
 
 /**
@@ -60,6 +63,49 @@ function normalizeFolder(folder: CollectionFolder): CollectionFolder {
 	return next;
 }
 
+const sourceKey = (source: CollectionSource) =>
+	`${source.addonId}|${source.type}|${source.catalogId}`;
+
+const isAddonSource = (source: CollectionSource) =>
+	(source.provider ?? "addon").toLowerCase() === "addon";
+
+/**
+ * Points a folder at `picks`, keeping the stored entry (and its genre) for a
+ * catalog still picked. The apps read `sources` first, so it follows too.
+ */
+function withCatalogs(
+	folder: CollectionFolder,
+	picks: CatalogSource[],
+): CollectionFolder {
+	const picked = new Set(picks.map(sourceKey));
+	const follow = <T extends CollectionSource>(
+		stored: T[],
+		keep: (source: T) => boolean,
+		add: (pick: CatalogSource) => T,
+	) => {
+		const kept = stored.filter(keep);
+		const present = new Set(kept.map(sourceKey));
+		return [
+			...kept,
+			...picks.filter((pick) => !present.has(sourceKey(pick))).map(add),
+		];
+	};
+	const catalogSources = follow(
+		folder.catalogSources ?? [],
+		(source) => picked.has(sourceKey(source)),
+		(pick) => pick,
+	);
+	if (!folder.sources) {
+		return { ...folder, catalogSources };
+	}
+	const sources = follow(
+		folder.sources,
+		(source) => !isAddonSource(source) || picked.has(sourceKey(source)),
+		(pick) => ({ provider: "addon", ...pick }),
+	);
+	return { ...folder, catalogSources, sources };
+}
+
 /** Applies a folder's edited fields. A blank title keeps the old one. */
 export function updateFolder(
 	collections: Collection[],
@@ -67,13 +113,17 @@ export function updateFolder(
 	folderId: string,
 	patch: Partial<Omit<CollectionFolder, "id">>,
 ): Collection[] {
+	const { catalogSources, ...fields } = patch;
 	return mapCollection(collections, collectionId, (collection) => ({
 		...collection,
 		folders: collection.folders.map((folder) => {
 			if (folder.id !== folderId) {
 				return folder;
 			}
-			const next = normalizeFolder({ ...folder, ...patch });
+			const edited = { ...folder, ...fields };
+			const next = normalizeFolder(
+				catalogSources ? withCatalogs(edited, catalogSources) : edited,
+			);
 			return next.title ? next : { ...next, title: folder.title };
 		}),
 	}));
@@ -124,4 +174,15 @@ export function effectiveViewMode(
 	viewMode: CollectionViewMode | undefined,
 ): "TABBED_GRID" | "ROWS" {
 	return viewMode === "ROWS" ? "ROWS" : "TABBED_GRID";
+}
+
+/** Mobile stores shapes lower-case and once called landscape `wide`. */
+export function effectiveTileShape(
+	shape: string | null | undefined,
+): PosterShape {
+	const value = shape?.toLowerCase();
+	if (value === "landscape" || value === "wide") {
+		return "LANDSCAPE";
+	}
+	return value === "square" ? "SQUARE" : "POSTER";
 }

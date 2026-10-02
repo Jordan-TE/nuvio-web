@@ -1,3 +1,4 @@
+import type { GenericSchema } from "valibot";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = {
@@ -6,11 +7,19 @@ const state = {
 	getCatalog: vi.fn(),
 };
 
-vi.mock("$app/server", () => ({
-	query: (schemaOrFn: unknown, fn?: unknown) => fn ?? schemaOrFn,
-	command: (schemaOrFn: unknown, fn?: unknown) => fn ?? schemaOrFn,
-	getRequestEvent: () => ({ locals: {}, fetch }),
-}));
+vi.mock("$app/server", async () => {
+	const v = await import("valibot");
+	// Validates like the real thing, so the schemas are under test too.
+	const remote =
+		(schema: GenericSchema, fn: (input: unknown) => unknown) =>
+		async (input: unknown) =>
+			fn(v.parse(schema, input));
+	return {
+		query: remote,
+		command: remote,
+		getRequestEvent: () => ({ locals: {}, fetch }),
+	};
+});
 
 vi.mock("#lib/server/guards.js", () => ({
 	requireProfile: () => ({
@@ -47,6 +56,49 @@ describe("saveCollections", () => {
 			p_profile_id: 1,
 			p_collections_json: [{ id: "c1", title: "One", folders: [] }],
 		});
+	});
+
+	// The push is a full replace: what the Nuvio apps store and this client
+	// does not edit (Mobile's nulls and lower-case shapes, TMDB sources) must survive.
+	it("passes another client's fields through untouched", async () => {
+		const mobile = [
+			{
+				id: "c1",
+				title: "One",
+				backdropImageUrl: null,
+				viewMode: "TABBED_GRID",
+				folders: [
+					{
+						id: "f1",
+						title: "F",
+						coverImageUrl: null,
+						tileShape: "poster",
+						focusGifEnabled: true,
+						sources: [{ provider: "tmdb", tmdbId: 42 }],
+						catalogSources: [
+							{
+								addonId: "a",
+								type: "movie",
+								catalogId: "top",
+								genre: "Action",
+							},
+						],
+					},
+				],
+			},
+		];
+		await saveCollections(mobile as never);
+		expect(state.collectionsReplace).toHaveBeenCalledWith({
+			p_profile_id: 1,
+			p_collections_json: mobile,
+		});
+	});
+
+	it("rejects a collection without a folder list", async () => {
+		await expect(
+			saveCollections([{ id: "c1", title: "One" }] as never),
+		).rejects.toThrow();
+		expect(state.collectionsReplace).not.toHaveBeenCalled();
 	});
 });
 

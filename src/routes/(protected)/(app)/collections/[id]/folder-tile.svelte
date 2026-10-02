@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { effectiveTileShape } from "#lib/collections/edit.js";
 	import type { CollectionFolder } from "#lib/nuvio/index.js";
 	import { cn } from "#lib/utils.js";
 
@@ -25,11 +26,11 @@
 	// Heights are fixed so a strip of mixed shapes lines up; the shape sets
 	// the width.
 	const shape = $derived(
-		folder.tileShape === "LANDSCAPE"
-			? "aspect-video"
-			: folder.tileShape === "SQUARE"
-				? "aspect-square"
-				: "aspect-2/3",
+		{
+			LANDSCAPE: "aspect-video",
+			SQUARE: "aspect-square",
+			POSTER: "aspect-2/3",
+		}[effectiveTileShape(folder.tileShape)],
 	);
 
 	let imageFailed = $state(false);

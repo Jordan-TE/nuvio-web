@@ -5,30 +5,24 @@ import { requireProfile } from "#lib/server/guards.js";
 import { command, query } from "$app/server";
 import { folderContents } from "./collections-data.ts";
 
-const catalogSourceSchema = v.object({
+// Loose on purpose: the Nuvio apps store fields this client never edits, and
+// the push is a full replace, so anything a schema strips is deleted for them.
+const catalogSourceSchema = v.looseObject({
 	addonId: v.string(),
 	type: v.string(),
 	catalogId: v.string(),
 });
 
-const folderSchema = v.object({
+const folderSchema = v.looseObject({
 	id: v.string(),
 	title: v.string(),
-	coverImageUrl: v.optional(v.string()),
-	coverEmoji: v.optional(v.string()),
-	tileShape: v.optional(v.picklist(["POSTER", "LANDSCAPE", "SQUARE"])),
-	hideTitle: v.optional(v.boolean()),
 	catalogSources: v.optional(v.array(catalogSourceSchema)),
 });
 
 const collectionsSchema = v.array(
-	v.object({
+	v.looseObject({
 		id: v.string(),
 		title: v.string(),
-		backdropImageUrl: v.optional(v.string()),
-		pinToTop: v.optional(v.boolean()),
-		viewMode: v.optional(v.picklist(["TABBED_GRID", "ROWS", "FOLLOW_LAYOUT"])),
-		showAllTab: v.optional(v.boolean()),
 		folders: v.array(folderSchema),
 	}),
 );

@@ -151,8 +151,14 @@ export type CollectionViewMode = SpecCollection["viewMode"];
 
 export type CatalogSource = Row<SpecFolder["catalogSources"]>;
 
+/** The apps' newer source list, read before `catalogSources`; TMDB / Trakt entries have no addon fields. */
+export type CollectionSource = Partial<CatalogSource> & {
+	provider?: string;
+	[field: string]: unknown;
+};
+
 export type CollectionFolder = Pick<SpecFolder, "id" | "title"> &
-	Partial<Omit<SpecFolder, "id" | "title">>;
+	Partial<Omit<SpecFolder, "id" | "title">> & { sources?: CollectionSource[] };
 
 export type Collection = Pick<SpecCollection, "id" | "title"> &
 	Partial<Omit<SpecCollection, "id" | "title" | "folders">> & {
