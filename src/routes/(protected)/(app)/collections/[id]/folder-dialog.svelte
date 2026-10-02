@@ -2,6 +2,7 @@
 	import ArrowLeftIcon from "@lucide/svelte/icons/arrow-left";
 	import ArrowRightIcon from "@lucide/svelte/icons/arrow-right";
 	import Trash2Icon from "@lucide/svelte/icons/trash-2";
+	import { effectiveTileShape } from "#lib/collections/edit.js";
 	import { Button } from "#lib/components/ui/button/index.js";
 	import { Checkbox } from "#lib/components/ui/checkbox/index.js";
 	import * as Dialog from "#lib/components/ui/dialog/index.js";
@@ -70,7 +71,7 @@
 		title = folder?.title ?? "";
 		coverEmoji = folder?.coverEmoji ?? "";
 		coverImageUrl = folder?.coverImageUrl ?? "";
-		tileShape = folder?.tileShape ?? "POSTER";
+		tileShape = effectiveTileShape(folder?.tileShape);
 		hideTitle = folder?.hideTitle ?? false;
 		picked = (folder?.catalogSources ?? []).map(keyOf);
 	});
