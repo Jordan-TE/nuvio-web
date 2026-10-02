@@ -11,6 +11,17 @@ streams in the tab, casts to a TV, or hands the link off to a native app.
 [![Image size](https://img.shields.io/docker/image-size/orochibraru/nuvio-web/latest)](https://hub.docker.com/r/orochibraru/nuvio-web)
 [![License](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](LICENSE)
 
+<!-- Regenerate with `bun run screenshots`; do not edit by hand. -->
+<!-- markdownlint-disable MD033 -->
+
+<a href="./docs/showcase.md">
+  <img alt="Nuvio Web: your Nuvio, in a browser" src="docs/images/feature-web.webp">
+</a>
+
+<!-- markdownlint-enable MD033 -->
+
+[See every screen, light and dark](./docs/showcase.md)
+
 ## Disclaimer
 
 Nuvio Web hosts no media. All catalogs, metadata, streams and subtitles come
@@ -19,21 +30,6 @@ responsible for**. The app is a shell around whatever those addons return; it
 does not endorse, index, or verify any addon or its content. Use only addons you
 have the right to use in your jurisdiction. Not affiliated with or endorsed by
 Nuvio.
-
-## What it looks like
-
-<!-- Regenerate with `bun run screenshots`; do not edit by hand. -->
-<!-- markdownlint-disable MD033 -->
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/home-dark.webp">
-  <source media="(prefers-color-scheme: light)" srcset="docs/images/home.webp">
-  <img alt="Nuvio Web's home screen" src="docs/images/home.webp" width="900">
-</picture>
-
-<!-- markdownlint-enable MD033 -->
-
-[See every screen, light and dark](./docs/showcase.md)
 
 ## Features
 

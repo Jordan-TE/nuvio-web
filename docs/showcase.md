@@ -85,6 +85,11 @@ only the light name and the docs site swaps in the dark one. Each shot asserts
 it landed on the right page before capturing, so a redirect or an empty screen
 fails the run instead of being published. Review the diff and commit.
 
+It then runs `bun run graphics` (`scripts/feature-graphic.ts`), which frames
+`home-dark.webp` in a browser window next to a tagline and writes
+`feature-web.webp`, the hero at the top of the README. Run it alone to re-lay
+the hero without retaking the shots.
+
 Nothing copyrighted and nothing torrent-backed goes on screen. Before shooting,
 the run finds or creates a **Showcase** profile on the e2e test account and
 seeds it through the Nuvio API: its only addon is `e2e/showcase-addon`, a static

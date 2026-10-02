@@ -181,10 +181,11 @@ otherwise, so your `bun run dev` on :5173 is untouched either way.
 **Screenshots are generated, not a test.** `e2e/showcase.spec.ts` is its own
 Playwright project, excluded from `test:e2e`; `bun run screenshots` rewrites
 `docs/images/*.webp` (light + `-dark`) used by the README and
-`docs/showcase.md`. Never hand-edit those images. The seeded addon is loaded
-from `main` on GitHub (the SSRF guard refuses localhost), so a change to
-`e2e/showcase-addon/` only shows up in the shots once it is pushed. Details in
-`docs/showcase.md`.
+`docs/showcase.md`, then `bun run graphics` lays the README hero
+(`feature-web.webp`) out around `home-dark.webp`. Never hand-edit those images.
+The seeded addon is loaded from `main` on GitHub (the SSRF guard refuses
+localhost), so a change to `e2e/showcase-addon/` only shows up in the shots once
+it is pushed. Details in `docs/showcase.md`.
 
 **Zero console errors.** Every spec that loads a page uses
 `collectRuntimeErrors` (`e2e/errors.ts`) and asserts `errors` is empty : an

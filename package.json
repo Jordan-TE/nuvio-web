@@ -26,7 +26,8 @@
 		"test:unit:coverage": "vitest run --coverage",
 		"test:e2e": "playwright test --project=chromium",
 		"test:e2e:ui": "playwright test --ui",
-		"screenshots": "playwright test --project=showcase"
+		"screenshots": "playwright test --project=showcase && bun run graphics",
+		"graphics": "bun run scripts/feature-graphic.ts"
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "4.13.0",
