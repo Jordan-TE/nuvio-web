@@ -31,6 +31,12 @@ does not endorse, index, or verify any addon or its content. Use only addons you
 have the right to use in your jurisdiction. Not affiliated with or endorsed by
 Nuvio.
 
+## Previews
+- The [stable release](https://nuvio.orochibraru.com)
+- The [canary release](https://canary.nuvio.orochibraru.com)
+
+All deployed using [Homerun](https://github.com/orochibraru/homerun)
+
 ## Features
 
 ### Browse
