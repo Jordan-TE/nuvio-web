@@ -38,7 +38,7 @@ type EncodedCodec = keyof typeof ENCODED_CODEC_STRING;
 
 /**
  * Why the player asks : `probe` (every direct file, as playback starts : fix
- * only when the browser can't decode its audio), `silent` (it plays without
+ * when the browser can't decode its audio or switch its tracks), `silent` (it plays without
  * sound), or `container` (`<video>` refused the file outright).
  */
 export type TransmuxReason = "probe" | "silent" | "container";
@@ -234,9 +234,14 @@ async function open(
 	}
 	const primary = await input.getPrimaryAudioTrack();
 	const { active, native } = startingTrack(audio, primary?.id, preference);
-	// The browser already plays the wanted track, with sound : nothing to fix.
+	// Direct files need MSE for track selection when the native API is absent.
 	if (reason === "probe" && native) {
-		return null;
+		if (audio.length < 2) {
+			return null;
+		}
+		if ("audioTracks" in document.createElement("video")) {
+			return null;
+		}
 	}
 	const duration = await input.computeDuration();
 	return { video, audio, encoded, active, duration };
