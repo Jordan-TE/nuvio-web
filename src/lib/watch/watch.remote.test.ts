@@ -68,6 +68,19 @@ describe("resolveStreams", () => {
 					infoHash: "y",
 					behaviorHints: { notWebReady: true },
 				},
+				{
+					url: "https://debrid/b.mkv",
+					addonName: "Debrid",
+					behaviorHints: { notWebReady: true },
+				},
+				{
+					url: "https://host/c.mkv",
+					addonName: "Proxied",
+					behaviorHints: {
+						notWebReady: true,
+						proxyHeaders: { request: { Referer: "https://host" } },
+					},
+				},
 			],
 			errors: [{ addonName: "Broken", message: "timeout" }],
 		}));
@@ -89,6 +102,10 @@ describe("resolveStreams", () => {
 			infoHash: "y",
 			fileSize: null,
 		});
+		// A notWebReady http link plays in the browser : only a header-gated one
+		// still needs the external player.
+		expect(out.streams[2]).toMatchObject({ notWebReady: false });
+		expect(out.streams[3]).toMatchObject({ notWebReady: true });
 		expect(out.errors).toEqual([{ addonName: "Broken", message: "timeout" }]);
 	});
 });

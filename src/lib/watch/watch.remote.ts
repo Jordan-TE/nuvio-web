@@ -3,6 +3,7 @@ import { getAddonClient, titleMeta } from "#lib/addons/server.js";
 import { httpUrlOrNull } from "#lib/core/url.js";
 import { requireProfile } from "#lib/server/guards.js";
 import { query } from "$app/server";
+import { needsExternalPlayer } from "./stream-format.ts";
 import { pullPlaybackMeta } from "./watch-data.ts";
 
 /**
@@ -32,19 +33,26 @@ export const resolveStreams = query(
 		const { client } = await getAddonClient();
 		const { streams, errors } = await client.getStreams(type, id);
 		return {
-			streams: streams.map((stream, index) => ({
-				index,
-				url: httpUrlOrNull(stream.url),
-				externalUrl: httpUrlOrNull(stream.externalUrl),
-				notWebReady: Boolean(stream.behaviorHints?.notWebReady),
-				name: stream.name ?? null,
-				title: stream.title ?? null,
-				description: stream.description ?? null,
-				addonName: stream.addonName,
-				fileSize: stream.behaviorHints?.videoSize ?? null,
-				infoHash: stream.infoHash ?? null,
-				filename: stream.behaviorHints?.filename ?? null,
-			})),
+			streams: streams.map((stream, index) => {
+				const url = httpUrlOrNull(stream.url);
+				return {
+					index,
+					url,
+					externalUrl: httpUrlOrNull(stream.externalUrl),
+					notWebReady: needsExternalPlayer(
+						Boolean(stream.behaviorHints?.notWebReady),
+						url,
+						stream.behaviorHints?.proxyHeaders?.request,
+					),
+					name: stream.name ?? null,
+					title: stream.title ?? null,
+					description: stream.description ?? null,
+					addonName: stream.addonName,
+					fileSize: stream.behaviorHints?.videoSize ?? null,
+					infoHash: stream.infoHash ?? null,
+					filename: stream.behaviorHints?.filename ?? null,
+				};
+			}),
 			errors: errors.map((entry) => ({
 				addonName: entry.addonName,
 				message: entry.message,

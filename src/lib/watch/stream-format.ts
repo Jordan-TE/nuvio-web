@@ -319,6 +319,30 @@ export function formatFileSize(bytes: number | null): string | null {
 	return `${value.toFixed(value >= 100 || unit < 2 ? 0 : 1)} ${units[unit]}`;
 }
 
+/**
+ * Whether an addon stream really can't play in the browser. Stremio's
+ * `notWebReady` means "route this through the streaming server", and addons
+ * set it defensively on any MKV / debrid link : yet a plain http(s) URL
+ * usually plays in a modern `<video>`, and the player's fatal screen still
+ * offers the external handoff if it doesn't. So the hint only sticks when the
+ * browser genuinely can't fetch the file itself: there's no http url (a
+ * torrent), or the addon needs request headers (`proxyHeaders`) that a
+ * `<video>` element can't send.
+ */
+export function needsExternalPlayer(
+	notWebReady: boolean,
+	httpUrl: string | null,
+	proxyRequestHeaders: Record<string, string> | undefined,
+): boolean {
+	if (!notWebReady) {
+		return false;
+	}
+	if (!httpUrl) {
+		return true;
+	}
+	return Object.keys(proxyRequestHeaders ?? {}).length > 0;
+}
+
 export function isPlayable(stream: ResolvedStream): boolean {
 	return Boolean(stream.url) && !stream.notWebReady;
 }

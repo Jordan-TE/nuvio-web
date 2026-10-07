@@ -5,6 +5,7 @@ import {
 	describeStream,
 	formatFileSize,
 	isPlayable,
+	needsExternalPlayer,
 	pickPreferredStream,
 	type ResolvedStream,
 	riskyVideoCodec,
@@ -130,6 +131,26 @@ describe("isPlayable", () => {
 		expect(isPlayable(stream({}))).toBe(true);
 		expect(isPlayable(stream({ url: null }))).toBe(false);
 		expect(isPlayable(stream({ notWebReady: true }))).toBe(false);
+	});
+});
+
+describe("needsExternalPlayer", () => {
+	it("ignores the hint when the stream isn't flagged", () => {
+		expect(needsExternalPlayer(false, null, undefined)).toBe(false);
+	});
+
+	it("lets a flagged plain http link play in the browser", () => {
+		expect(needsExternalPlayer(true, "https://debrid/a.mkv", undefined)).toBe(
+			false,
+		);
+		expect(needsExternalPlayer(true, "https://debrid/a.mkv", {})).toBe(false);
+	});
+
+	it("keeps the hint without an http url or with request headers", () => {
+		expect(needsExternalPlayer(true, null, undefined)).toBe(true);
+		expect(
+			needsExternalPlayer(true, "https://host/a.mkv", { Referer: "x" }),
+		).toBe(true);
 	});
 });
 
